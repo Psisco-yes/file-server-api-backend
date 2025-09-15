@@ -1,13 +1,17 @@
 package api
 
 import (
+	"archive/zip"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"path"
 	"serwer-plikow/internal/database"
+	"serwer-plikow/internal/models"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -79,13 +83,17 @@ func (s *Server) CreateFolderHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) {
-			if pgErr.Code == "23503" {
+			switch pgErr.Code {
+			case "23503": // foreign_key_violation
 				http.Error(w, "Parent folder does not exist", http.StatusBadRequest)
 				return
+			case "23505": // unique_violation
+				http.Error(w, "A folder with the same name already exists in this location", http.StatusConflict)
+				return
 			}
-			// TODO: Dodać obsługę błędu '23505' (unique_violation)
 		}
 
+		log.Printf("ERROR: Failed to create folder in database: %v", err)
 		http.Error(w, "Failed to create folder", http.StatusInternalServerError)
 		return
 	}
@@ -99,15 +107,66 @@ func (s *Server) ListNodesHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 
 	parentIDStr := r.URL.Query().Get("parent_id")
+	sharerUsername := r.URL.Query().Get("shared_by_username")
 
-	var parentID *string
-	if parentIDStr != "" {
-		parentID = &parentIDStr
+	if sharerUsername == "" {
+		var parentID *string
+		if parentIDStr != "" {
+			parentID = &parentIDStr
+		}
+
+		nodes, err := s.store.GetNodesByParentID(r.Context(), claims.UserID, parentID)
+		if err != nil {
+			log.Printf("ERROR: Failed to list own nodes for user %d: %v", claims.UserID, err)
+			http.Error(w, "Failed to list nodes", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(nodes)
+		return
 	}
 
-	nodes, err := s.store.GetNodesByParentID(r.Context(), claims.UserID, parentID)
+	sharer, err := s.store.GetUserByUsername(r.Context(), sharerUsername)
 	if err != nil {
-		http.Error(w, "Failed to list nodes", http.StatusInternalServerError)
+		log.Printf("ERROR: Failed to find sharer '%s': %v", sharerUsername, err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	if sharer == nil {
+		http.Error(w, "Sharer not found", http.StatusNotFound)
+		return
+	}
+
+	if parentIDStr == "" {
+		nodes, err := s.store.ListDirectlySharedNodes(r.Context(), claims.UserID, sharer.ID)
+		if err != nil {
+			log.Printf("ERROR: Failed to list directly shared nodes for user %d from sharer %d: %v", claims.UserID, sharer.ID, err)
+			http.Error(w, "Failed to list shared nodes", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(nodes)
+		return
+	}
+
+	hasAccess, err := s.store.HasAccessToNode(r.Context(), parentIDStr, claims.UserID)
+	if err != nil {
+		log.Printf("ERROR: Failed to check access for user %d to node %s: %v", claims.UserID, parentIDStr, err)
+		http.Error(w, "Failed to check access permissions", http.StatusInternalServerError)
+		return
+	}
+
+	isOwner := sharer.ID == claims.UserID
+
+	if !hasAccess && !isOwner {
+		http.Error(w, "Access denied to this shared folder", http.StatusForbidden)
+		return
+	}
+
+	nodes, err := s.store.GetNodesByParentID(r.Context(), sharer.ID, &parentIDStr)
+	if err != nil {
+		log.Printf("ERROR: Failed to list children for shared node %s: %v", parentIDStr, err)
+		http.Error(w, "Failed to list shared nodes content", http.StatusInternalServerError)
 		return
 	}
 
@@ -118,19 +177,12 @@ func (s *Server) ListNodesHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<30)
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<30) // 1GB limit na CAŁE zapytanie
 
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		http.Error(w, "Error parsing multipart form", http.StatusBadRequest)
 		return
 	}
-
-	file, handler, err := r.FormFile("file")
-	if err != nil {
-		http.Error(w, "Error retrieving the file", http.StatusBadRequest)
-		return
-	}
-	defer file.Close()
 
 	parentIDStr := r.FormValue("parent_id")
 	var parentID *string
@@ -142,39 +194,65 @@ func (s *Server) UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 		parentID = &parentIDStr
 	}
 
-	nodeID, err := s.generateUniqueID(r.Context())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	files := r.MultipartForm.File["file"]
+	if len(files) == 0 {
+		http.Error(w, "No files uploaded", http.StatusBadRequest)
 		return
 	}
 
-	if err := s.storage.Save(nodeID, file); err != nil {
-		http.Error(w, "Failed to save file", http.StatusInternalServerError)
-		return
+	var createdNodes []models.Node
+
+	for _, handler := range files {
+		file, err := handler.Open()
+		if err != nil {
+			log.Printf("ERROR opening multipart file %s: %v", handler.Filename, err)
+			continue
+		}
+		defer file.Close()
+
+		nodeID, err := s.generateUniqueID(r.Context())
+		if err != nil {
+			log.Printf("ERROR generating unique ID for file %s: %v", handler.Filename, err)
+			continue
+		}
+
+		if err := s.storage.Save(nodeID, file); err != nil {
+			log.Printf("ERROR saving file %s to storage: %v", handler.Filename, err)
+			continue
+		}
+
+		sizeBytes := handler.Size
+		mimeType := handler.Header.Get("Content-Type")
+		params := database.CreateNodeParams{
+			ID:        nodeID,
+			OwnerID:   claims.UserID,
+			ParentID:  parentID,
+			Name:      handler.Filename,
+			NodeType:  "file",
+			SizeBytes: &sizeBytes,
+			MimeType:  &mimeType,
+		}
+
+		node, err := s.store.CreateNode(r.Context(), params)
+		if err != nil {
+			log.Printf("ERROR creating db record for file %s: %v", handler.Filename, err)
+			log.Printf("Attempting to clean up orphaned file on disk: %s", nodeID)
+			if cleanupErr := s.storage.Delete(nodeID); cleanupErr != nil {
+				log.Printf("CRITICAL: Failed to clean up orphaned file %s: %v", nodeID, cleanupErr)
+			}
+			continue
+		}
+
+		createdNodes = append(createdNodes, *node)
 	}
 
-	sizeBytes := handler.Size
-	mimeType := handler.Header.Get("Content-Type")
-
-	params := database.CreateNodeParams{
-		ID:        nodeID,
-		OwnerID:   claims.UserID,
-		ParentID:  parentID,
-		Name:      handler.Filename,
-		NodeType:  "file",
-		SizeBytes: &sizeBytes,
-		MimeType:  &mimeType,
-	}
-
-	node, err := s.store.CreateNode(r.Context(), params)
-	if err != nil {
-		// TODO: Dodać logikę usuwania pliku z dysku, jeśli zapis do bazy się nie powiódł
-		http.Error(w, "Failed to create file record", http.StatusInternalServerError)
+	if len(createdNodes) == 0 {
+		http.Error(w, "None of the files could be processed", http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(node)
+	json.NewEncoder(w).Encode(createdNodes)
 }
 
 func (s *Server) DownloadFileHandler(w http.ResponseWriter, r *http.Request) {
@@ -314,4 +392,84 @@ func (s *Server) UpdateNodeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) DownloadArchiveHandler(w http.ResponseWriter, r *http.Request) {
+	claims := GetUserFromContext(r.Context())
+
+	idsQuery := r.URL.Query().Get("ids")
+	if idsQuery == "" {
+		http.Error(w, "Node IDs are required", http.StatusBadRequest)
+		return
+	}
+	nodeIDs := strings.Split(idsQuery, ",")
+
+	nodesToPack := make(map[string]models.Node)
+	nodePaths := make(map[string]string)
+
+	var collectNodes func(nodeID, currentPath string) error
+	collectNodes = func(nodeID, currentPath string) error {
+		if _, exists := nodesToPack[nodeID]; exists {
+			return nil
+		}
+
+		node, err := s.store.GetNodeByID(r.Context(), nodeID, claims.UserID)
+		if err != nil {
+			return fmt.Errorf("database error for node %s: %w", nodeID, err)
+		}
+		if node == nil {
+			return fmt.Errorf("node with ID %s not found or you do not have permission to access it", nodeID)
+		}
+
+		fullPath := path.Join(currentPath, node.Name)
+		nodesToPack[node.ID] = *node
+		nodePaths[node.ID] = fullPath
+
+		if node.NodeType == "folder" {
+			children, err := s.store.GetNodesByParentID(r.Context(), claims.UserID, &node.ID)
+			if err != nil {
+				return fmt.Errorf("could not list children of folder %s: %w", node.Name, err)
+			}
+			for _, child := range children {
+				if err := collectNodes(child.ID, fullPath); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+
+	for _, id := range nodeIDs {
+		if err := collectNodes(id, ""); err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", `attachment; filename="archive.zip"`)
+
+	zipWriter := zip.NewWriter(w)
+	defer zipWriter.Close()
+
+	for id, node := range nodesToPack {
+		fullPath := nodePaths[id]
+
+		if node.NodeType == "folder" {
+			zipWriter.Create(fullPath + "/")
+		} else {
+			fileWriter, err := zipWriter.Create(fullPath)
+			if err != nil {
+				log.Printf("ERROR creating entry in zip for %s: %v", node.Name, err)
+				continue
+			}
+			fileStream, err := s.storage.Get(node.ID)
+			if err != nil {
+				log.Printf("ERROR getting file stream for %s: %v", node.Name, err)
+				continue
+			}
+			io.Copy(fileWriter, fileStream)
+			fileStream.Close()
+		}
+	}
 }

@@ -64,6 +64,10 @@ func main() {
 		r.Patch("/api/v1/nodes/{nodeId}", server.UpdateNodeHandler)
 		r.Get("/api/v1/trash", server.ListTrashHandler)
 		r.Post("/api/v1/nodes/{nodeId}/restore", server.RestoreNodeHandler)
+		r.Get("/api/v1/nodes/archive", server.DownloadArchiveHandler)
+		r.Post("/api/v1/nodes/{nodeId}/share", server.ShareNodeHandler)
+		r.Get("/api/v1/shares/incoming/users", server.ListSharingUsersHandler)
+		r.Get("/api/v1/shares/incoming/nodes", server.ListSharedNodesHandler)
 	})
 
 	log.Println("Uruchamianie serwera na porcie :8080")

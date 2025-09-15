@@ -318,3 +318,59 @@ func (s *PostgresStore) RestoreNode(ctx context.Context, id string, ownerID int6
 
 	return res.RowsAffected() > 0, nil
 }
+
+// TODO: Ulepszyć tą funkcję, bo jest wolna.
+func (s *PostgresStore) GetNodesWithSubtree(ctx context.Context, ownerID int64, ids []string) ([]models.Node, error) {
+	query := `
+		WITH RECURSIVE subtree AS (
+			SELECT 
+				id, owner_id, parent_id, name, node_type, size_bytes, mime_type, 
+				created_at, modified_at, deleted_at, original_parent_id,
+				name AS relative_path
+			FROM nodes
+			WHERE id = ANY($1::varchar[]) AND owner_id = $2 AND deleted_at IS NULL
+
+			UNION ALL
+
+			SELECT 
+				n.id, n.owner_id, n.parent_id, n.name, n.node_type, n.size_bytes, n.mime_type, 
+				n.created_at, n.modified_at, n.deleted_at, n.original_parent_id,
+				(st.relative_path || '/' || n.name)::varchar
+			FROM nodes n
+			JOIN subtree st ON n.parent_id = st.id
+			WHERE n.deleted_at IS NULL
+		)
+		SELECT id, owner_id, parent_id, name, node_type, size_bytes, mime_type, relative_path
+		FROM subtree;
+	`
+
+	rows, err := s.pool.Query(ctx, query, ids, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	type NodeWithRelativePath struct {
+		models.Node
+		RelativePath string `db:"relative_path"`
+	}
+
+	var nodes []NodeWithRelativePath
+	for rows.Next() {
+		var node NodeWithRelativePath
+		err := rows.Scan(
+			&node.ID, &node.OwnerID, &node.ParentID, &node.Name, &node.NodeType,
+			&node.SizeBytes, &node.MimeType, &node.RelativePath,
+		)
+		if err != nil {
+			return nil, err
+		}
+		nodes = append(nodes, node)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return nil, nil
+}
