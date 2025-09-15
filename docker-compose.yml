@@ -1,0 +1,40 @@
+services:
+  db:
+    image: postgres:14-alpine
+    container_name: fileserver_db
+    restart: always
+    environment:
+      - POSTGRES_USER=fileserver
+      - POSTGRES_PASSWORD=bardzosekretnehaslo
+      - POSTGRES_DB=fileserver_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fileserver -d fileserver_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    container_name: fileserver_app
+    build: .
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_SOURCE=postgresql://fileserver:bardzosekretnehaslo@db:5432/fileserver_db?sslmode=disable
+      - JWT_SECRET=bardzosekretnykluczJWT
+      - FILE_STORAGE_PATH=/storage
+    volumes:
+      - file_storage:/storage
+      - ./configs:/configs:ro
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  file_storage:
