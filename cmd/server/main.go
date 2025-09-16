@@ -1,3 +1,10 @@
+// @title           File Server API
+// @version         1.0
+// @host            localhost:8080
+// @BasePath        /api/v1
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
 package main
 
 import (
@@ -13,6 +20,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	_ "serwer-plikow/docs"
+
+	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 func main() {
@@ -49,36 +60,40 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	r.Group(func(r chi.Router) {
-		r.Post("/api/v1/auth/login", server.LoginHandler)
-		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte("Serwer plików działa!"))
-		})
-		r.Get("/ws", server.ServeWsHandler)
+	r.Get("/swagger/*", httpSwagger.Handler(
+		httpSwagger.URL("http://localhost:8080/swagger/doc.json"),
+	))
+
+	r.Get("/ws", server.ServeWsHandler)
+
+	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("Serwer plików działa! Dokumentacja dostępna pod /swagger/index.html"))
 	})
 
-	r.Group(func(r chi.Router) {
+	r.Post("/api/v1/auth/login", server.LoginHandler)
+
+	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(server.AuthMiddleware)
-		r.Get("/api/v1/me", server.GetCurrentUserHandler)
-		r.Post("/api/v1/nodes/folder", server.CreateFolderHandler)
-		r.Get("/api/v1/nodes", server.ListNodesHandler)
-		r.Post("/api/v1/nodes/file", server.UploadFileHandler)
-		r.Get("/api/v1/nodes/{nodeId}/download", server.DownloadFileHandler)
-		r.Delete("/api/v1/nodes/{nodeId}", server.DeleteNodeHandler)
-		r.Delete("/api/v1/trash/purge", server.PurgeTrashHandler)
-		r.Patch("/api/v1/nodes/{nodeId}", server.UpdateNodeHandler)
-		r.Get("/api/v1/trash", server.ListTrashHandler)
-		r.Post("/api/v1/nodes/{nodeId}/restore", server.RestoreNodeHandler)
-		r.Get("/api/v1/nodes/archive", server.DownloadArchiveHandler)
-		r.Post("/api/v1/nodes/{nodeId}/share", server.ShareNodeHandler)
-		r.Get("/api/v1/shares/incoming/users", server.ListSharingUsersHandler)
-		r.Get("/api/v1/shares/incoming/nodes", server.ListSharedNodesHandler)
-		r.Get("/api/v1/shares/outgoing", server.ListOutgoingSharesHandler)
-		r.Delete("/api/v1/shares/{shareId}", server.DeleteShareHandler)
-		r.Post("/api/v1/nodes/{nodeId}/favorite", server.AddFavoriteHandler)
-		r.Delete("/api/v1/nodes/{nodeId}/favorite", server.RemoveFavoriteHandler)
-		r.Get("/api/v1/favorites", server.ListFavoritesHandler)
-		r.Get("/api/v1/events", server.GetEventsHandler)
+		r.Get("/me", server.GetCurrentUserHandler)
+		r.Get("/nodes", server.ListNodesHandler)
+		r.Post("/nodes/folder", server.CreateFolderHandler)
+		r.Post("/nodes/file", server.UploadFileHandler)
+		r.Get("/nodes/{nodeId}/download", server.DownloadFileHandler)
+		r.Patch("/nodes/{nodeId}", server.UpdateNodeHandler)
+		r.Delete("/nodes/{nodeId}", server.DeleteNodeHandler)
+		r.Post("/nodes/{nodeId}/restore", server.RestoreNodeHandler)
+		r.Post("/nodes/{nodeId}/favorite", server.AddFavoriteHandler)
+		r.Delete("/nodes/{nodeId}/favorite", server.RemoveFavoriteHandler)
+		r.Get("/nodes/archive", server.DownloadArchiveHandler)
+		r.Get("/trash", server.ListTrashHandler)
+		r.Delete("/trash/purge", server.PurgeTrashHandler)
+		r.Get("/favorites", server.ListFavoritesHandler)
+		r.Post("/nodes/{nodeId}/share", server.ShareNodeHandler)
+		r.Get("/shares/incoming/users", server.ListSharingUsersHandler)
+		r.Get("/shares/incoming/nodes", server.ListSharedNodesHandler)
+		r.Get("/shares/outgoing", server.ListOutgoingSharesHandler)
+		r.Delete("/shares/{shareId}", server.DeleteShareHandler)
+		r.Get("/events", server.GetEventsHandler)
 	})
 
 	log.Println("Uruchamianie serwera na porcie :8080")

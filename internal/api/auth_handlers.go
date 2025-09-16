@@ -15,6 +15,13 @@ type LoginResponse struct {
 	Token string `json:"token"`
 }
 
+// @Summary      Logs a user in
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        loginRequest   body      LoginRequest  true  "Login Credentials"
+// @Success      200            {object}  LoginResponse
+// @Router       /auth/login [post]
 func (s *Server) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
