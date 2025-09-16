@@ -329,6 +329,9 @@ func (s *Server) DeleteNodeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	payload := map[string]string{"id": nodeID}
+	s.store.LogEvent(r.Context(), claims.UserID, "node_trashed", payload)
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -340,6 +343,16 @@ type UpdateNodeRequest struct {
 func (s *Server) UpdateNodeHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 	nodeID := chi.URLParam(r, "nodeId")
+
+	originalNode, err := s.store.GetNodeByID(r.Context(), nodeID, claims.UserID)
+	if err != nil {
+		http.Error(w, "Failed to retrieve node", http.StatusInternalServerError)
+		return
+	}
+	if originalNode == nil {
+		http.Error(w, "Node not found or you do not have permission to modify it", http.StatusNotFound)
+		return
+	}
 
 	var req UpdateNodeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -370,6 +383,13 @@ func (s *Server) UpdateNodeHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Node not found or you do not have permission to modify it", http.StatusNotFound)
 			return
 		}
+
+		payload := map[string]interface{}{
+			"id":       nodeID,
+			"new_name": newName,
+			"old_name": originalNode.Name,
+		}
+		s.store.LogEvent(r.Context(), claims.UserID, "node_renamed", payload)
 		updated = true
 	}
 
@@ -393,6 +413,13 @@ func (s *Server) UpdateNodeHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Node not found or you do not have permission to modify it", http.StatusNotFound)
 			return
 		}
+
+		payload := map[string]interface{}{
+			"id":            nodeID,
+			"new_parent_id": *req.ParentID,
+			"old_parent_id": originalNode.ParentID,
+		}
+		s.store.LogEvent(r.Context(), claims.UserID, "node_moved", payload)
 		updated = true
 	}
 

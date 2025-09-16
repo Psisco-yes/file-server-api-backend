@@ -5,6 +5,7 @@ import (
 	"errors"
 	"serwer-plikow/internal/models"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
@@ -224,15 +225,32 @@ func (s *PostgresStore) GetOutgoingShares(ctx context.Context, sharerID int64) (
 	return shares, nil
 }
 
-func (s *PostgresStore) DeleteShare(ctx context.Context, shareID int64, sharerID int64) (bool, error) {
+func (s *PostgresStore) DeleteShare(ctx context.Context, shareID int64, sharerID int64) error {
+	query := `DELETE FROM shares WHERE id = $1 AND sharer_id = $2`
+	_, err := s.pool.Exec(ctx, query, shareID, sharerID)
+	return err
+}
+
+func (s *PostgresStore) GetShareByID(ctx context.Context, shareID int64, sharerID int64) (*models.Share, error) {
 	query := `
-		DELETE FROM shares
+		SELECT id, node_id, sharer_id, recipient_id, permissions, shared_at
+		FROM shares
 		WHERE id = $1 AND sharer_id = $2
 	`
-	res, err := s.pool.Exec(ctx, query, shareID, sharerID)
+	var share models.Share
+	err := s.pool.QueryRow(ctx, query, shareID, sharerID).Scan(
+		&share.ID,
+		&share.NodeID,
+		&share.SharerID,
+		&share.RecipientID,
+		&share.Permissions,
+		&share.SharedAt,
+	)
 	if err != nil {
-		return false, err
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
 	}
-
-	return res.RowsAffected() > 0, nil
+	return &share, nil
 }

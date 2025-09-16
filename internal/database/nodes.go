@@ -129,7 +129,7 @@ func (s *PostgresStore) NodeExists(ctx context.Context, id string) (bool, error)
 
 func (s *PostgresStore) GetNodeByID(ctx context.Context, id string, ownerID int64) (*models.Node, error) {
 	query := `
-		SELECT id, owner_id, parent_id, name, node_type, size_bytes, mime_type
+		SELECT id, owner_id, parent_id, name, node_type, size_bytes, mime_type, created_at, modified_at
 		FROM nodes
 		WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL
 	`
@@ -143,6 +143,8 @@ func (s *PostgresStore) GetNodeByID(ctx context.Context, id string, ownerID int6
 		&node.NodeType,
 		&node.SizeBytes,
 		&node.MimeType,
+		&node.CreatedAt,
+		&node.ModifiedAt,
 	)
 
 	if err != nil {

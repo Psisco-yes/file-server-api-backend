@@ -60,5 +60,8 @@ func (s *Server) RestoreNodeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	restoredNode, _ := s.store.GetNodeByID(r.Context(), nodeID, claims.UserID)
+	s.store.LogEvent(r.Context(), claims.UserID, "node_restored", restoredNode)
+
 	w.WriteHeader(http.StatusOK)
 }

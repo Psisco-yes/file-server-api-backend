@@ -75,6 +75,13 @@ func (s *Server) ShareNodeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	payload := map[string]interface{}{
+		"share_info": share,
+		"node_info":  node,
+	}
+
+	s.store.LogEvent(r.Context(), recipient.ID, "node_shared_with_you", payload)
+
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(share)
 }
@@ -140,16 +147,23 @@ func (s *Server) DeleteShareHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	success, err := s.store.DeleteShare(r.Context(), shareID, claims.UserID)
+	shareInfo, err := s.store.GetShareByID(r.Context(), shareID, claims.UserID)
 	if err != nil {
+		http.Error(w, "Failed to retrieve share information", http.StatusInternalServerError)
+		return
+	}
+	if shareInfo == nil {
+		http.Error(w, "Share not found or you do not have permission to delete it", http.StatusNotFound)
+		return
+	}
+
+	if err := s.store.DeleteShare(r.Context(), shareID, claims.UserID); err != nil {
 		http.Error(w, "Failed to delete share", http.StatusInternalServerError)
 		return
 	}
 
-	if !success {
-		http.Error(w, "Share not found or you do not have permission to delete it", http.StatusNotFound)
-		return
-	}
+	payload := map[string]string{"node_id": shareInfo.NodeID}
+	s.store.LogEvent(r.Context(), shareInfo.RecipientID, "share_revoked_for_you", payload)
 
 	w.WriteHeader(http.StatusNoContent)
 }
