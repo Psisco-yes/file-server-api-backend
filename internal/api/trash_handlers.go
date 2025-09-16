@@ -10,6 +10,15 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// PurgeTrashHandler permanently deletes all items from the trash.
+// @Summary      Purge trash
+// @Description  Permanently deletes all files and folders from the user's trash. This action cannot be undone.
+// @Tags         trash
+// @Security     BearerAuth
+// @Success      204  {null}    nil "No Content"
+// @Failure      401  {string}  string "Unauthorized"
+// @Failure      500  {string}  string "Internal Server Error"
+// @Router       /trash/purge [delete]
 func (s *Server) PurgeTrashHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 
@@ -28,6 +37,18 @@ func (s *Server) PurgeTrashHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// RestoreNodeHandler restores a file or folder from the trash.
+// @Summary      Restore a node from trash
+// @Description  Restores a file or folder from the trash to its original location. Fails if a node with the same name already exists in the target location.
+// @Tags         nodes
+// @Security     BearerAuth
+// @Param        nodeId   path      string  true  "Node ID to restore"
+// @Success      200      {null}    nil   "OK"
+// @Failure      401      {string}  string "Unauthorized"
+// @Failure      404      {string}  string "Not Found"
+// @Failure      409      {string}  string "Conflict - a node with the same name already exists in the original location"
+// @Failure      500      {string}  string "Internal Server Error"
+// @Router       /nodes/{nodeId}/restore [post]
 func (s *Server) ListTrashHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 
@@ -41,6 +62,16 @@ func (s *Server) ListTrashHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(nodes)
 }
 
+// ListTrashHandler lists all items currently in the user's trash.
+// @Summary      List trash contents
+// @Description  Retrieves a list of all files and folders currently in the user's trash.
+// @Tags         trash
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {array}   NodeResponse
+// @Failure      401  {string}  string "Unauthorized"
+// @Failure      500  {string}  string "Internal Server Error"
+// @Router       /trash [get]
 func (s *Server) RestoreNodeHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 	nodeID := chi.URLParam(r, "nodeId")

@@ -13,6 +13,7 @@ import (
 	"serwer-plikow/internal/database"
 	"serwer-plikow/internal/models"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -22,6 +23,18 @@ import (
 type CreateFolderRequest struct {
 	Name     string  `json:"name"`
 	ParentID *string `json:"parent_id"`
+}
+
+type NodeResponse struct {
+	ID         string    `json:"id" example:"_vx2a-43VqRT5wz_s9u4"`
+	OwnerID    int64     `json:"owner_id" example:"1"`
+	ParentID   *string   `json:"parent_id,omitempty" example:"fLW5kAh2ia9vYmjMnU4nZ"`
+	Name       string    `json:"name" example:"Raport.docx"`
+	NodeType   string    `json:"node_type" example:"file"`
+	SizeBytes  *int64    `json:"size_bytes,omitempty" example:"1024"`
+	MimeType   *string   `json:"mime_type,omitempty" example:"application/pdf"`
+	CreatedAt  time.Time `json:"created_at"`
+	ModifiedAt time.Time `json:"modified_at"`
 }
 
 func (s *Server) generateUniqueID(ctx context.Context) (string, error) {
@@ -46,6 +59,20 @@ func (s *Server) generateUniqueID(ctx context.Context) (string, error) {
 	return "", fmt.Errorf("failed to generate a unique ID after %d attempts", maxRetries)
 }
 
+// CreateFolderHandler obsługuje tworzenie nowego folderu.
+// @Summary      Create a new folder
+// @Description  Creates a new folder in a specified parent folder or in the root directory if parent_id is omitted.
+// @Tags         nodes
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        folderRequest  body      CreateFolderRequest  true  "Folder details"
+// @Success      201            {object}  NodeResponse
+// @Failure      400            {string}  string "Bad Request"
+// @Failure      401            {string}  string "Unauthorized"
+// @Failure      409            {string}  string "Conflict - folder with this name already exists"
+// @Failure      500            {string}  string "Internal Server Error"
+// @Router       /nodes/folder [post]
 func (s *Server) CreateFolderHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 
@@ -108,6 +135,20 @@ func (s *Server) CreateFolderHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(node)
 }
 
+// ListNodesHandler obsługuje listowanie plików i folderów.
+// @Summary      List nodes
+// @Description  Lists files and folders. If 'shared_by_username' is provided, it lists shared content. Otherwise, it lists the user's own content.
+// @Tags         nodes
+// @Produce      json
+// @Security     BearerAuth
+// @Param        parent_id          query     string  false  "ID of the parent folder to list. Omit for root."
+// @Param        shared_by_username query     string  false  "Username of the person who shared the content."
+// @Success      200                {array}   NodeResponse
+// @Failure      401                {string}  string "Unauthorized"
+// @Failure      403                {string}  string "Forbidden"
+// @Failure      404                {string}  string "Not Found"
+// @Failure      500                {string}  string "Internal Server Error"
+// @Router       /nodes [get]
 func (s *Server) ListNodesHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 
@@ -179,6 +220,20 @@ func (s *Server) ListNodesHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(nodes)
 }
 
+// UploadFileHandler obsługuje wgrywanie jednego lub więcej plików.
+// @Summary      Upload file(s)
+// @Description  Uploads one or more files to a specified parent folder or the root directory. Use multipart/form-data.
+// @Tags         nodes
+// @Accept       multipart/form-data
+// @Produce      json
+// @Security     BearerAuth
+// @Param        file       formData  file    true   "The file(s) to upload. Can be provided multiple times."
+// @Param        parent_id  formData  string  false  "ID of the parent folder."
+// @Success      201        {array}   NodeResponse
+// @Failure      400        {string}  string "Bad Request"
+// @Failure      401        {string}  string "Unauthorized"
+// @Failure      500        {string}  string "Internal Server Error"
+// @Router       /nodes/file [post]
 func (s *Server) UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 
@@ -265,6 +320,19 @@ func (s *Server) UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(createdNodes)
 }
 
+// DownloadFileHandler obsługuje pobieranie pliku.
+// @Summary      Download a file
+// @Description  Downloads a single file by its ID.
+// @Tags         nodes
+// @Produce      application/octet-stream
+// @Security     BearerAuth
+// @Param        nodeId   path      string  true  "Node ID of the file to download"
+// @Success      200      {file}    binary  "The file content"
+// @Failure      400      {string}  string "Bad Request - Cannot download a folder"
+// @Failure      401      {string}  string "Unauthorized"
+// @Failure      404      {string}  string "Not Found"
+// @Failure      500      {string}  string "Internal Server Error"
+// @Router       /nodes/{nodeId}/download [get]
 func (s *Server) DownloadFileHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 
@@ -309,6 +377,17 @@ func (s *Server) DownloadFileHandler(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, fileStream)
 }
 
+// DeleteNodeHandler przenosi plik lub folder do kosza.
+// @Summary      Move node to trash
+// @Description  Moves a file or a folder (and its contents) to the trash (soft delete).
+// @Tags         nodes
+// @Security     BearerAuth
+// @Param        nodeId   path      string  true  "Node ID to move to trash"
+// @Success      204      {null}    nil     "No Content"
+// @Failure      401      {string}  string "Unauthorized"
+// @Failure      404      {string}  string "Not Found"
+// @Failure      500      {string}  string "Internal Server Error"
+// @Router       /nodes/{nodeId} [delete]
 func (s *Server) DeleteNodeHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 	nodeID := chi.URLParam(r, "nodeId")
@@ -340,6 +419,21 @@ type UpdateNodeRequest struct {
 	ParentID *string `json:"parent_id"`
 }
 
+// UpdateNodeHandler obsługuje zmianę nazwy lub przenoszenie pliku/folderu.
+// @Summary      Update a node
+// @Description  Updates a node's properties, such as its name or parent folder.
+// @Tags         nodes
+// @Accept       json
+// @Security     BearerAuth
+// @Param        nodeId         path      string             true  "Node ID to update"
+// @Param        updateRequest  body      UpdateNodeRequest  true  "Properties to update"
+// @Success      200            {null}    nil                "OK"
+// @Failure      400            {string}  string "Bad Request"
+// @Failure      401            {string}  string "Unauthorized"
+// @Failure      404            {string}  string "Not Found"
+// @Failure      409            {string}  string "Conflict"
+// @Failure      500            {string}  string "Internal Server Error"
+// @Router       /nodes/{nodeId} [patch]
 func (s *Server) UpdateNodeHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 	nodeID := chi.URLParam(r, "nodeId")
@@ -431,6 +525,19 @@ func (s *Server) UpdateNodeHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// DownloadArchiveHandler obsługuje pobieranie wielu plików/folderów jako archiwum ZIP.
+// @Summary      Download an archive
+// @Description  Downloads multiple files and/or folders as a single ZIP archive.
+// @Tags         nodes
+// @Produce      application/zip
+// @Security     BearerAuth
+// @Param        ids    query     string  true  "Comma-separated list of Node IDs to include in the archive"
+// @Success      200    {file}    binary  "The ZIP archive content"
+// @Failure      400    {string}  string "Bad Request"
+// @Failure      401    {string}  string "Unauthorized"
+// @Failure      404    {string}  string "Not Found - one of the nodes does not exist"
+// @Failure      500    {string}  string "Internal Server Error"
+// @Router       /nodes/archive [get]
 func (s *Server) DownloadArchiveHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 

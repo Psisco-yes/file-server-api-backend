@@ -1,6 +1,6 @@
 // @title           File Server API
 // @version         1.0
-// @host            localhost
+// @description     A comprehensive file server API built with Go. It supports file and folder management, sharing, real-time updates via WebSockets, and more. All protected endpoints require a Bearer Token for authorization.
 // @schemes         http https
 // @BasePath        /api/v1
 // @securityDefinitions.apikey BearerAuth
@@ -17,6 +17,8 @@ import (
 	"serwer-plikow/internal/database"
 	"serwer-plikow/internal/storage"
 	"serwer-plikow/internal/websocket"
+
+	"github.com/go-chi/cors"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -59,12 +61,21 @@ func main() {
 
 	r := chi.NewRouter()
 
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"https://*", "http://*"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposedHeaders:   []string{"Link"},
+		AllowCredentials: true,
+		MaxAge:           300,
+	}))
+
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(api.MetricsMiddleware)
 
 	r.Get("/swagger/*", httpSwagger.Handler(
-		httpSwagger.URL("https://localhost/swagger/doc.json"),
+		httpSwagger.URL("/swagger/doc.json"),
 	))
 
 	r.Get("/ws", server.ServeWsHandler)
@@ -76,7 +87,7 @@ func main() {
 	r.Post("/api/v1/auth/login", server.LoginHandler)
 
 	r.Get("/health", server.HealthCheckHandler)
-	r.Handle("/metrics", promhttp.Handler())
+	r.Get("/metrics", metricsHandler())
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(server.AuthMiddleware)
@@ -106,4 +117,8 @@ func main() {
 	if err := http.ListenAndServe(":8080", r); err != nil {
 		log.Fatalf("Nie można uruchomić serwera: %v", err)
 	}
+}
+
+func metricsHandler() http.HandlerFunc {
+	return promhttp.Handler().ServeHTTP
 }

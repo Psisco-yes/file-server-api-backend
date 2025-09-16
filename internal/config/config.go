@@ -10,6 +10,7 @@ type Config struct {
 	DB      DBConfig      `mapstructure:"db"`
 	JWT     JWTConfig     `mapstructure:"jwt"`
 	Storage StorageConfig `mapstructure:"storage"`
+	AppHost string        `mapstructure:"host"`
 }
 
 type DBConfig struct {

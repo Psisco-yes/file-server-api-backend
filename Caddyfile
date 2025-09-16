@@ -1,16 +1,14 @@
-{
-    auto_https off
+https:// {
+    tls /certs/cert.pem /certs/key.pem
 
-    servers {
-        trusted_proxies static private_ranges
+    reverse_proxy app:8080 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_ip}
+        header_up X-Forwarded-For {remote_ip}
+        header_up X-Forwarded-Proto {scheme}
     }
 }
 
-:443 {
-    reverse_proxy app:8080
-    tls internal
-}
-
-:80 {
+http:// {
     redir https://{host}{uri}
 }

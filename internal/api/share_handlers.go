@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"serwer-plikow/internal/database"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -16,6 +17,49 @@ type ShareRequest struct {
 	Permissions       string `json:"permissions"`
 }
 
+type SharingUserResponse struct {
+	ID          int64  `json:"id" example:"2"`
+	Username    string `json:"username" example:"user2"`
+	DisplayName string `json:"display_name" example:"Test User"`
+}
+
+type OutgoingShareResponse struct {
+	ID                int64     `json:"id"`
+	NodeID            string    `json:"node_id"`
+	SharerID          int64     `json:"sharer_id"`
+	RecipientID       int64     `json:"recipient_id"`
+	Permissions       string    `json:"permissions"`
+	SharedAt          time.Time `json:"shared_at"`
+	NodeName          string    `json:"node_name" example:"Raport.docx"`
+	NodeType          string    `json:"node_type" example:"file"`
+	RecipientUsername string    `json:"recipient_username" example:"user2"`
+}
+
+type ShareResponse struct {
+	ID          int64     `json:"id" example:"1"`
+	NodeID      string    `json:"node_id" example:"_vx2a-43VqRT5wz_s9u4"`
+	SharerID    int64     `json:"sharer_id" example:"1"`
+	RecipientID int64     `json:"recipient_id" example:"2"`
+	Permissions string    `json:"permissions" example:"read"`
+	SharedAt    time.Time `json:"shared_at"`
+}
+
+// ShareNodeHandler handles sharing a node with another user.
+// @Summary      Share a node
+// @Description  Shares a file or folder with another user, granting them read or write permissions.
+// @Tags         shares
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        nodeId       path      string        true  "Node ID to share"
+// @Param        shareRequest body      ShareRequest  true  "Share details"
+// @Success      201          {object}  ShareResponse
+// @Failure      400          {string}  string "Bad Request"
+// @Failure      401          {string}  string "Unauthorized"
+// @Failure      404          {string}  string "Not Found - Node or recipient not found"
+// @Failure      409          {string}  string "Conflict - Node is already shared with this user"
+// @Failure      500          {string}  string "Internal Server Error"
+// @Router       /nodes/{nodeId}/share [post]
 func (s *Server) ShareNodeHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 	nodeID := chi.URLParam(r, "nodeId")
@@ -86,6 +130,16 @@ func (s *Server) ShareNodeHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(share)
 }
 
+// ListSharingUsersHandler retrieves a list of users who have shared items with the current user.
+// @Summary      List users who shared with me
+// @Description  Gets a unique list of users who have shared one or more items with the currently authenticated user. This is the root level for the "Shared with me" view.
+// @Tags         shares
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {array}   SharingUserResponse
+// @Failure      401  {string}  string "Unauthorized"
+// @Failure      500  {string}  string "Internal Server Error"
+// @Router       /shares/incoming/users [get]
 func (s *Server) ListSharingUsersHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 
@@ -99,6 +153,19 @@ func (s *Server) ListSharingUsersHandler(w http.ResponseWriter, r *http.Request)
 	json.NewEncoder(w).Encode(users)
 }
 
+// ListSharedNodesHandler lists the content shared by a specific user.
+// @Summary      List items shared by a user
+// @Description  Lists the files and folders directly shared with the current user by a specific sharer.
+// @Tags         shares
+// @Produce      json
+// @Security     BearerAuth
+// @Param        sharer_username  query     string  true  "Username of the person who shared the content"
+// @Success      200              {array}   NodeResponse
+// @Failure      400              {string}  string "Bad Request"
+// @Failure      401              {string}  string "Unauthorized"
+// @Failure      404              {string}  string "Not Found"
+// @Failure      500              {string}  string "Internal Server Error"
+// @Router       /shares/incoming/nodes [get]
 func (s *Server) ListSharedNodesHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 
@@ -124,6 +191,16 @@ func (s *Server) ListSharedNodesHandler(w http.ResponseWriter, r *http.Request) 
 	json.NewEncoder(w).Encode(nodes)
 }
 
+// ListOutgoingSharesHandler retrieves a list of shares created by the current user.
+// @Summary      List items I have shared
+// @Description  Gets a list of all items the currently authenticated user has shared with others.
+// @Tags         shares
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {array}   OutgoingShareResponse
+// @Failure      401  {string}  string "Unauthorized"
+// @Failure      500  {string}  string "Internal Server Error"
+// @Router       /shares/outgoing [get]
 func (s *Server) ListOutgoingSharesHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 
@@ -137,6 +214,18 @@ func (s *Server) ListOutgoingSharesHandler(w http.ResponseWriter, r *http.Reques
 	json.NewEncoder(w).Encode(shares)
 }
 
+// DeleteShareHandler revokes a share.
+// @Summary      Revoke a share
+// @Description  Revokes a share entry. Only the original sharer can do this.
+// @Tags         shares
+// @Security     BearerAuth
+// @Param        shareId  path      int  true  "ID of the share to delete"
+// @Success      204      {null}    nil "No Content"
+// @Failure      400      {string}  string "Bad Request"
+// @Failure      401      {string}  string "Unauthorized"
+// @Failure      404      {string}  string "Not Found"
+// @Failure      500      {string}  string "Internal Server Error"
+// @Router       /shares/{shareId} [delete]
 func (s *Server) DeleteShareHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 

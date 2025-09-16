@@ -54,6 +54,15 @@ func (s *Server) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(LoginResponse{Token: token})
 }
 
+// @Summary      Get current user info
+// @Description  Retrieves information about the currently authenticated user from their JWT token.
+// @Tags         auth
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {object}  auth.AppClaims
+// @Failure      401  {string}  string "Unauthorized"
+// @Failure      500  {string}  string "Internal Server Error"
+// @Router       /me [get]
 func (s *Server) GetCurrentUserHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 	if claims == nil {
