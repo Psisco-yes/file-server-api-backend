@@ -8,6 +8,7 @@ import (
 	"serwer-plikow/internal/config"
 	"serwer-plikow/internal/database"
 	"serwer-plikow/internal/storage"
+	"serwer-plikow/internal/websocket"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -37,8 +38,11 @@ func main() {
 	}
 	log.Printf("Pliki będą przechowywane w: %s", cfg.Storage.Path)
 
-	store := database.NewStore(dbpool)
-	server := api.NewServer(cfg, store, localStorage)
+	wsHub := websocket.NewHub()
+	go wsHub.Run()
+
+	store := database.NewStore(dbpool, wsHub)
+	server := api.NewServer(cfg, store, localStorage, wsHub)
 
 	r := chi.NewRouter()
 
@@ -50,6 +54,7 @@ func main() {
 		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte("Serwer plików działa!"))
 		})
+		r.Get("/ws", server.ServeWsHandler)
 	})
 
 	r.Group(func(r chi.Router) {
@@ -68,6 +73,12 @@ func main() {
 		r.Post("/api/v1/nodes/{nodeId}/share", server.ShareNodeHandler)
 		r.Get("/api/v1/shares/incoming/users", server.ListSharingUsersHandler)
 		r.Get("/api/v1/shares/incoming/nodes", server.ListSharedNodesHandler)
+		r.Get("/api/v1/shares/outgoing", server.ListOutgoingSharesHandler)
+		r.Delete("/api/v1/shares/{shareId}", server.DeleteShareHandler)
+		r.Post("/api/v1/nodes/{nodeId}/favorite", server.AddFavoriteHandler)
+		r.Delete("/api/v1/nodes/{nodeId}/favorite", server.RemoveFavoriteHandler)
+		r.Get("/api/v1/favorites", server.ListFavoritesHandler)
+		r.Get("/api/v1/events", server.GetEventsHandler)
 	})
 
 	log.Println("Uruchamianie serwera na porcie :8080")

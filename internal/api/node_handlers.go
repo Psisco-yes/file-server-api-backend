@@ -98,6 +98,11 @@ func (s *Server) CreateFolderHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	err = s.store.LogEvent(r.Context(), claims.UserID, "node_created", node)
+	if err != nil {
+		log.Printf("WARN: Failed to log 'node_created' event for node %s: %v", node.ID, err)
+	}
+
 	w.WriteHeader(http.StatusCreated)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(node)
@@ -159,7 +164,7 @@ func (s *Server) ListNodesHandler(w http.ResponseWriter, r *http.Request) {
 	isOwner := sharer.ID == claims.UserID
 
 	if !hasAccess && !isOwner {
-		http.Error(w, "Access denied to this shared folder", http.StatusForbidden)
+		http.Error(w, "Shared folder not found or access denied", http.StatusNotFound)
 		return
 	}
 
@@ -243,6 +248,11 @@ func (s *Server) UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
+		err = s.store.LogEvent(r.Context(), claims.UserID, "node_created", node)
+		if err != nil {
+			log.Printf("WARN: Failed to log 'node_created' event for node %s: %v", node.ID, err)
+		}
+
 		createdNodes = append(createdNodes, *node)
 	}
 
@@ -264,7 +274,7 @@ func (s *Server) DownloadFileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	node, err := s.store.GetNodeByID(r.Context(), nodeID, claims.UserID)
+	node, err := s.store.GetNodeIfAccessible(r.Context(), nodeID, claims.UserID)
 	if err != nil {
 		http.Error(w, "Failed to retrieve file metadata", http.StatusInternalServerError)
 		return

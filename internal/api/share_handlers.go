@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"serwer-plikow/internal/database"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -114,4 +115,41 @@ func (s *Server) ListSharedNodesHandler(w http.ResponseWriter, r *http.Request) 
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(nodes)
+}
+
+func (s *Server) ListOutgoingSharesHandler(w http.ResponseWriter, r *http.Request) {
+	claims := GetUserFromContext(r.Context())
+
+	shares, err := s.store.GetOutgoingShares(r.Context(), claims.UserID)
+	if err != nil {
+		http.Error(w, "Failed to retrieve outgoing shares", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(shares)
+}
+
+func (s *Server) DeleteShareHandler(w http.ResponseWriter, r *http.Request) {
+	claims := GetUserFromContext(r.Context())
+
+	shareIDStr := chi.URLParam(r, "shareId")
+	shareID, err := strconv.ParseInt(shareIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid share ID format", http.StatusBadRequest)
+		return
+	}
+
+	success, err := s.store.DeleteShare(r.Context(), shareID, claims.UserID)
+	if err != nil {
+		http.Error(w, "Failed to delete share", http.StatusInternalServerError)
+		return
+	}
+
+	if !success {
+		http.Error(w, "Share not found or you do not have permission to delete it", http.StatusNotFound)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

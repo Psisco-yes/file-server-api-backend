@@ -43,3 +43,19 @@ CREATE TABLE user_favorites (
     node_id VARCHAR(21) NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
     PRIMARY KEY (user_id, node_id)
 );
+
+CREATE TABLE event_journal (
+    id BIGSERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    event_type VARCHAR(50) NOT NULL,
+    event_time TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+    payload JSONB NOT NULL
+);
+
+CREATE INDEX idx_event_journal_user_id_id ON event_journal(user_id, id);
+
+INSERT INTO users (username, password_hash, display_name)
+VALUES ('admin', '$2a$12$Q5YPzisDD241y55p0fwlJe/myrAlTl4BEzromC5nKzDM6jK33XaBK', 'Administrator');
+
+INSERT INTO users (username, password_hash, display_name)
+VALUES ('user', '$2a$12$YVeabseYD5moPjzMWjtMQOgc4sx0U4avHCOW5AdfLm41TTHEYrWlC', 'Test User');

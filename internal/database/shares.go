@@ -173,3 +173,66 @@ func (s *PostgresStore) HasAccessToNode(ctx context.Context, nodeID string, reci
 	err := s.pool.QueryRow(ctx, query, nodeID, recipientID).Scan(&hasAccess)
 	return hasAccess, err
 }
+
+type OutgoingShare struct {
+	models.Share
+	NodeName          string `json:"node_name"`
+	NodeType          string `json:"node_type"`
+	RecipientUsername string `json:"recipient_username"`
+}
+
+func (s *PostgresStore) GetOutgoingShares(ctx context.Context, sharerID int64) ([]OutgoingShare, error) {
+	query := `
+		SELECT 
+			s.id, s.node_id, s.sharer_id, s.recipient_id, s.permissions, s.shared_at,
+			n.name AS node_name,
+			n.node_type AS node_type,
+			u.username AS recipient_username
+		FROM shares s
+		JOIN nodes n ON s.node_id = n.id
+		JOIN users u ON s.recipient_id = u.id
+		WHERE s.sharer_id = $1
+		ORDER BY s.shared_at DESC
+	`
+	rows, err := s.pool.Query(ctx, query, sharerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var shares []OutgoingShare
+	for rows.Next() {
+		var share OutgoingShare
+		err := rows.Scan(
+			&share.ID, &share.NodeID, &share.SharerID, &share.RecipientID, &share.Permissions, &share.SharedAt,
+			&share.NodeName, &share.NodeType, &share.RecipientUsername,
+		)
+		if err != nil {
+			return nil, err
+		}
+		shares = append(shares, share)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if shares == nil {
+		return []OutgoingShare{}, nil
+	}
+
+	return shares, nil
+}
+
+func (s *PostgresStore) DeleteShare(ctx context.Context, shareID int64, sharerID int64) (bool, error) {
+	query := `
+		DELETE FROM shares
+		WHERE id = $1 AND sharer_id = $2
+	`
+	res, err := s.pool.Exec(ctx, query, shareID, sharerID)
+	if err != nil {
+		return false, err
+	}
+
+	return res.RowsAffected() > 0, nil
+}
