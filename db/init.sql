@@ -24,6 +24,9 @@ CREATE TABLE nodes (
     CONSTRAINT unique_name_in_parent UNIQUE (owner_id, parent_id, name)
 );
 
+CREATE UNIQUE INDEX unique_name_in_folder ON nodes (owner_id, parent_id, name) WHERE parent_id IS NOT NULL;
+CREATE UNIQUE INDEX unique_name_in_root ON nodes (owner_id, name) WHERE parent_id IS NULL;
+
 CREATE INDEX idx_nodes_owner_id ON nodes(owner_id);
 CREATE INDEX idx_nodes_parent_id ON nodes(parent_id);
 

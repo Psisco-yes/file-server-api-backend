@@ -33,14 +33,10 @@ func (s *Server) RemoveFavoriteHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 	nodeID := chi.URLParam(r, "nodeId")
 
-	success, err := s.store.RemoveFavorite(r.Context(), claims.UserID, nodeID)
+	_, err := s.store.RemoveFavorite(r.Context(), claims.UserID, nodeID)
 	if err != nil {
 		http.Error(w, "Failed to remove from favorites", http.StatusInternalServerError)
 		return
-	}
-
-	if !success {
-
 	}
 
 	w.WriteHeader(http.StatusNoContent)

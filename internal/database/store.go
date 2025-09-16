@@ -20,3 +20,7 @@ func NewStore(pool *pgxpool.Pool, wsHub *websocket.Hub) *PostgresStore {
 		wsHub: wsHub,
 	}
 }
+
+func (s *PostgresStore) GetPool() *pgxpool.Pool {
+	return s.pool
+}
