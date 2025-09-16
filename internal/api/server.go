@@ -1,6 +1,9 @@
 package api
 
 import (
+	"encoding/json"
+	"log"
+	"net/http"
 	"serwer-plikow/internal/config"
 	"serwer-plikow/internal/database"
 	"serwer-plikow/internal/storage"
@@ -21,4 +24,23 @@ func NewServer(cfg *config.Config, store *database.PostgresStore, storage *stora
 		storage: storage,
 		wsHub:   wsHub,
 	}
+}
+
+func (s *Server) HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
+	err := s.store.GetPool().Ping(r.Context())
+
+	status := make(map[string]string)
+	if err == nil {
+		status["status"] = "ok"
+		status["database"] = "connected"
+		w.WriteHeader(http.StatusOK)
+	} else {
+		status["status"] = "error"
+		status["database"] = "disconnected"
+		log.Printf("Health check failed: database ping error: %v", err)
+		w.WriteHeader(http.StatusServiceUnavailable) // Kod 503
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(status)
 }

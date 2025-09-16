@@ -1,3 +1,16 @@
-localhost {
+{
+    auto_https off
+
+    servers {
+        trusted_proxies static private_ranges
+    }
+}
+
+:443 {
     reverse_proxy app:8080
+    tls internal
+}
+
+:80 {
+    redir https://{host}{uri}
 }

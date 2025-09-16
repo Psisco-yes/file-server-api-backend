@@ -1,8 +1,8 @@
 db:
-  source: "postgresql://fileserver:bardzosekretnehaslo@localhost:5432/fileserver_db?sslmode=disable"
+  source: ""
 
 jwt:
-  secret: "bardzosekretnykluczJWT"
+  secret: ""
 
 storage:
   path: "/storage"

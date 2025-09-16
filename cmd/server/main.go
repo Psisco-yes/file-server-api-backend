@@ -1,6 +1,7 @@
 // @title           File Server API
 // @version         1.0
-// @host            localhost:8080
+// @host            localhost
+// @schemes         http https
 // @BasePath        /api/v1
 // @securityDefinitions.apikey BearerAuth
 // @in header
@@ -20,6 +21,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	_ "serwer-plikow/docs"
 
@@ -59,9 +61,10 @@ func main() {
 
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	r.Use(api.MetricsMiddleware)
 
 	r.Get("/swagger/*", httpSwagger.Handler(
-		httpSwagger.URL("http://localhost:8080/swagger/doc.json"),
+		httpSwagger.URL("https://localhost/swagger/doc.json"),
 	))
 
 	r.Get("/ws", server.ServeWsHandler)
@@ -71,6 +74,9 @@ func main() {
 	})
 
 	r.Post("/api/v1/auth/login", server.LoginHandler)
+
+	r.Get("/health", server.HealthCheckHandler)
+	r.Handle("/metrics", promhttp.Handler())
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(server.AuthMiddleware)
