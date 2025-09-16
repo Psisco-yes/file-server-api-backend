@@ -18,12 +18,23 @@ services:
       timeout: 5s
       retries: 5
 
+  caddy:
+    image: caddy:2-alpine
+    container_name: fileserver_proxy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+    depends_on:
+      - app
+  
   app:
     container_name: fileserver_app
     build: .
     restart: always
-    ports:
-      - "8080:8080"
     environment:
       - DB_SOURCE=postgresql://fileserver:bardzosekretnehaslo@db:5432/fileserver_db?sslmode=disable
       - JWT_SECRET=bardzosekretnykluczJWT
@@ -38,3 +49,4 @@ services:
 volumes:
   postgres_data:
   file_storage:
+  caddy_data:
