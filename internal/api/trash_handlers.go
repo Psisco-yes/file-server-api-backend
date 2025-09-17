@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"serwer-plikow/internal/database"
+	"serwer-plikow/internal/models"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -76,23 +77,44 @@ func (s *Server) RestoreNodeHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 	nodeID := chi.URLParam(r, "nodeId")
 
-	success, err := s.store.RestoreNode(r.Context(), nodeID, claims.UserID)
-	if err != nil {
-		if errors.Is(err, database.ErrDuplicateNodeName) {
-			http.Error(w, "Cannot restore: a node with the same name already exists in the original location", http.StatusConflict)
+	var restoredNode *models.Node
+
+	txErr := s.store.ExecTx(r.Context(), func(q *database.Queries) error {
+		success, err := q.RestoreNode(r.Context(), nodeID, claims.UserID)
+		if err != nil {
+			return err
+		}
+		if !success {
+			return database.ErrNodeNotFound
+		}
+
+		restoredNode, err = q.GetNodeByID(r.Context(), nodeID, claims.UserID)
+		if err != nil {
+			return err
+		}
+		if restoredNode == nil {
+			return errors.New("failed to retrieve restored node")
+		}
+
+		return q.LogEvent(r.Context(), claims.UserID, "node_restored", restoredNode)
+	})
+
+	if txErr != nil {
+		if errors.Is(txErr, database.ErrNodeNotFound) {
+			http.Error(w, "Node not found in trash...", http.StatusNotFound)
+			return
+		}
+		if errors.Is(txErr, database.ErrDuplicateNodeName) {
+			http.Error(w, "Cannot restore: a node with the same name already exists...", http.StatusConflict)
 			return
 		}
 		http.Error(w, "Failed to restore node", http.StatusInternalServerError)
 		return
 	}
 
-	if !success {
-		http.Error(w, "Node not found in trash or you do not have permission to restore it", http.StatusNotFound)
-		return
-	}
-
-	restoredNode, _ := s.store.GetNodeByID(r.Context(), nodeID, claims.UserID)
-	s.store.LogEvent(r.Context(), claims.UserID, "node_restored", restoredNode)
+	eventMsg := map[string]interface{}{"event_type": "node_restored", "payload": restoredNode}
+	eventBytes, _ := json.Marshal(eventMsg)
+	s.wsHub.PublishEvent(claims.UserID, eventBytes)
 
 	w.WriteHeader(http.StatusOK)
 }

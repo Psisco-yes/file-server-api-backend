@@ -106,10 +106,21 @@ func (s *Server) CreateFolderHandler(w http.ResponseWriter, r *http.Request) {
 		NodeType: "folder",
 	}
 
-	node, err := s.store.CreateNode(r.Context(), params)
-	if err != nil {
+	var createdNode *models.Node
+
+	txErr := s.store.ExecTx(r.Context(), func(q *database.Queries) error {
+		var txErr error
+		createdNode, txErr = q.CreateNode(r.Context(), params)
+		if txErr != nil {
+			return txErr
+		}
+
+		return q.LogEvent(r.Context(), claims.UserID, "node_created", createdNode)
+	})
+
+	if txErr != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) {
+		if errors.As(txErr, &pgErr) {
 			switch pgErr.Code {
 			case "23503": // foreign_key_violation
 				http.Error(w, "Parent folder does not exist", http.StatusBadRequest)
@@ -119,20 +130,25 @@ func (s *Server) CreateFolderHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-
-		log.Printf("ERROR: Failed to create folder in database: %v", err)
+		log.Printf("ERROR: Transaction failed in CreateFolderHandler: %v", txErr)
 		http.Error(w, "Failed to create folder", http.StatusInternalServerError)
 		return
 	}
 
-	err = s.store.LogEvent(r.Context(), claims.UserID, "node_created", node)
+	eventMsg := map[string]interface{}{
+		"event_type": "node_created",
+		"payload":    createdNode,
+	}
+	eventBytes, err := json.Marshal(eventMsg)
 	if err != nil {
-		log.Printf("WARN: Failed to log 'node_created' event for node %s: %v", node.ID, err)
+		log.Printf("CRITICAL: Failed to marshal WebSocket event for node %s: %v", createdNode.ID, err)
+	} else {
+		s.wsHub.PublishEvent(claims.UserID, eventBytes)
 	}
 
 	w.WriteHeader(http.StatusCreated)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(node)
+	json.NewEncoder(w).Encode(createdNode)
 }
 
 // ListNodesHandler obsługuje listowanie plików i folderów.
@@ -293,22 +309,30 @@ func (s *Server) UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 			MimeType:  &mimeType,
 		}
 
-		node, err := s.store.CreateNode(r.Context(), params)
-		if err != nil {
-			log.Printf("ERROR creating db record for file %s: %v", handler.Filename, err)
-			log.Printf("Attempting to clean up orphaned file on disk: %s", nodeID)
+		var createdNode *models.Node
+
+		txErr := s.store.ExecTx(r.Context(), func(q *database.Queries) error {
+			var err error
+			createdNode, err = q.CreateNode(r.Context(), params)
+			if err != nil {
+				return err
+			}
+			return q.LogEvent(r.Context(), claims.UserID, "node_created", createdNode)
+		})
+
+		if txErr != nil {
+			log.Printf("ERROR creating db record for file %s: %v", handler.Filename, txErr)
 			if cleanupErr := s.storage.Delete(nodeID); cleanupErr != nil {
 				log.Printf("CRITICAL: Failed to clean up orphaned file %s: %v", nodeID, cleanupErr)
 			}
 			continue
 		}
 
-		err = s.store.LogEvent(r.Context(), claims.UserID, "node_created", node)
-		if err != nil {
-			log.Printf("WARN: Failed to log 'node_created' event for node %s: %v", node.ID, err)
-		}
+		eventMsg := map[string]interface{}{"event_type": "node_created", "payload": createdNode}
+		eventBytes, _ := json.Marshal(eventMsg)
+		s.wsHub.PublishEvent(claims.UserID, eventBytes)
 
-		createdNodes = append(createdNodes, *node)
+		createdNodes = append(createdNodes, *createdNode)
 	}
 
 	if len(createdNodes) == 0 {
@@ -397,19 +421,32 @@ func (s *Server) DeleteNodeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	success, err := s.store.MoveNodeToTrash(r.Context(), nodeID, claims.UserID)
-	if err != nil {
+	txErr := s.store.ExecTx(r.Context(), func(q *database.Queries) error {
+		success, err := q.MoveNodeToTrash(r.Context(), nodeID, claims.UserID)
+		if err != nil {
+			return err
+		}
+		if !success {
+			return database.ErrNodeNotFound
+		}
+
+		payload := map[string]string{"id": nodeID}
+		return q.LogEvent(r.Context(), claims.UserID, "node_trashed", payload)
+	})
+
+	if txErr != nil {
+		if errors.Is(txErr, database.ErrNodeNotFound) {
+			http.Error(w, "Node not found or you do not have permission to delete it", http.StatusNotFound)
+			return
+		}
 		http.Error(w, "Failed to delete node", http.StatusInternalServerError)
 		return
 	}
 
-	if !success {
-		http.Error(w, "Node not found or you do not have permission to delete it", http.StatusNotFound)
-		return
-	}
-
 	payload := map[string]string{"id": nodeID}
-	s.store.LogEvent(r.Context(), claims.UserID, "node_trashed", payload)
+	eventMsg := map[string]interface{}{"event_type": "node_trashed", "payload": payload}
+	eventBytes, _ := json.Marshal(eventMsg)
+	s.wsHub.PublishEvent(claims.UserID, eventBytes)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -463,57 +500,98 @@ func (s *Server) UpdateNodeHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		success, err := s.store.RenameNode(r.Context(), nodeID, claims.UserID, newName)
-		if err != nil {
-			if errors.Is(err, database.ErrDuplicateNodeName) {
-				http.Error(w, err.Error(), http.StatusConflict)
+		txErr := s.store.ExecTx(r.Context(), func(q *database.Queries) error {
+			success, err := q.RenameNode(r.Context(), nodeID, claims.UserID, newName)
+			if err != nil {
+				return err
+			}
+			if !success {
+				return database.ErrNodeNotFound
+			}
+
+			payload := map[string]interface{}{
+				"id":       nodeID,
+				"new_name": newName,
+				"old_name": originalNode.Name,
+			}
+			return q.LogEvent(r.Context(), claims.UserID, "node_renamed", payload)
+		})
+
+		if txErr != nil {
+			if errors.Is(txErr, database.ErrDuplicateNodeName) {
+				http.Error(w, txErr.Error(), http.StatusConflict)
+				return
+			}
+			if errors.Is(txErr, database.ErrNodeNotFound) {
+				http.Error(w, "Node not found or you do not have permission to modify it", http.StatusNotFound)
 				return
 			}
 			http.Error(w, "Failed to rename node", http.StatusInternalServerError)
 			return
 		}
 
-		if !success {
-			http.Error(w, "Node not found or you do not have permission to modify it", http.StatusNotFound)
-			return
-		}
+		payload := map[string]interface{}{"id": nodeID, "new_name": newName, "old_name": originalNode.Name}
+		eventMsg := map[string]interface{}{"event_type": "node_renamed", "payload": payload}
+		eventBytes, _ := json.Marshal(eventMsg)
+		s.wsHub.PublishEvent(claims.UserID, eventBytes)
 
-		payload := map[string]interface{}{
-			"id":       nodeID,
-			"new_name": newName,
-			"old_name": originalNode.Name,
-		}
-		s.store.LogEvent(r.Context(), claims.UserID, "node_renamed", payload)
 		updated = true
 	}
 
 	if req.ParentID != nil {
-		if len(*req.ParentID) != 21 {
+		newParentID := *req.ParentID
+		if len(newParentID) != 21 {
 			http.Error(w, "Invalid ParentID format", http.StatusBadRequest)
 			return
 		}
 
-		success, err := s.store.MoveNode(r.Context(), nodeID, claims.UserID, req.ParentID)
-		if err != nil {
-			if errors.Is(err, database.ErrDuplicateNodeName) {
+		if originalNode.NodeType == "folder" {
+			isCircular, err := s.store.IsDescendantOf(r.Context(), nodeID, newParentID)
+			if err != nil {
+				http.Error(w, "Failed to validate move operation", http.StatusInternalServerError)
+				return
+			}
+			if isCircular {
+				http.Error(w, "Cannot move a folder into itself or one of its subfolders", http.StatusBadRequest)
+				return
+			}
+		}
+
+		txErr := s.store.ExecTx(r.Context(), func(q *database.Queries) error {
+			success, err := q.MoveNode(r.Context(), nodeID, claims.UserID, &newParentID)
+			if err != nil {
+				return err
+			}
+			if !success {
+				return database.ErrNodeNotFound
+			}
+
+			payload := map[string]interface{}{
+				"id":            nodeID,
+				"new_parent_id": newParentID,
+				"old_parent_id": originalNode.ParentID,
+			}
+			return q.LogEvent(r.Context(), claims.UserID, "node_moved", payload)
+		})
+
+		if txErr != nil {
+			if errors.Is(txErr, database.ErrDuplicateNodeName) {
 				http.Error(w, "A node with the same name already exists in the target folder", http.StatusConflict)
 				return
 			}
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			if strings.Contains(txErr.Error(), "target folder does not exist") {
+				http.Error(w, txErr.Error(), http.StatusBadRequest)
+				return
+			}
+			http.Error(w, "Failed to move node", http.StatusInternalServerError)
 			return
 		}
 
-		if !success {
-			http.Error(w, "Node not found or you do not have permission to modify it", http.StatusNotFound)
-			return
-		}
+		payload := map[string]interface{}{"id": nodeID, "new_parent_id": newParentID, "old_parent_id": originalNode.ParentID}
+		eventMsg := map[string]interface{}{"event_type": "node_moved", "payload": payload}
+		eventBytes, _ := json.Marshal(eventMsg)
+		s.wsHub.PublishEvent(claims.UserID, eventBytes)
 
-		payload := map[string]interface{}{
-			"id":            nodeID,
-			"new_parent_id": *req.ParentID,
-			"old_parent_id": originalNode.ParentID,
-		}
-		s.store.LogEvent(r.Context(), claims.UserID, "node_moved", payload)
 		updated = true
 	}
 
@@ -522,7 +600,10 @@ func (s *Server) UpdateNodeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	updatedNode, _ := s.store.GetNodeByID(r.Context(), nodeID, claims.UserID)
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(updatedNode)
 }
 
 // DownloadArchiveHandler obsługuje pobieranie wielu plików/folderów jako archiwum ZIP.

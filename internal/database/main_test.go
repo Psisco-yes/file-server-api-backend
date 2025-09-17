@@ -12,7 +12,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-var testStore *PostgresStore
+var testStore *Store
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
@@ -53,7 +53,7 @@ func TestMain(m *testing.M) {
 		log.Fatalf("failed to apply schema: %s", err)
 	}
 
-	testStore = NewStore(pool, nil)
+	testStore = NewStore(pool)
 
 	os.Exit(m.Run())
 }

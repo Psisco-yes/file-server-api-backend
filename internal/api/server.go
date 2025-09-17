@@ -12,12 +12,12 @@ import (
 
 type Server struct {
 	config  *config.Config
-	store   *database.PostgresStore
+	store   *database.Store
 	storage *storage.LocalStorage
 	wsHub   *websocket.Hub
 }
 
-func NewServer(cfg *config.Config, store *database.PostgresStore, storage *storage.LocalStorage, wsHub *websocket.Hub) *Server {
+func NewServer(cfg *config.Config, store *database.Store, storage *storage.LocalStorage, wsHub *websocket.Hub) *Server {
 	return &Server{
 		config:  cfg,
 		store:   store,

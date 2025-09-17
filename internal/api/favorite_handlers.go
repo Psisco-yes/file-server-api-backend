@@ -24,18 +24,31 @@ func (s *Server) AddFavoriteHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 	nodeID := chi.URLParam(r, "nodeId")
 
-	err := s.store.AddFavorite(r.Context(), claims.UserID, nodeID)
-	if err != nil {
+	txErr := s.store.ExecTx(r.Context(), func(q *database.Queries) error {
+		err := q.AddFavorite(r.Context(), claims.UserID, nodeID)
+		if err != nil {
+			return err
+		}
+		payload := map[string]string{"node_id": nodeID}
+		return q.LogEvent(r.Context(), claims.UserID, "favorite_added", payload)
+	})
+
+	if txErr != nil {
 		switch {
-		case errors.Is(err, database.ErrNodeNotFound):
+		case errors.Is(txErr, database.ErrNodeNotFound):
 			http.Error(w, "Node not found or you do not have permission to access it", http.StatusNotFound)
-		case errors.Is(err, database.ErrFavoriteAlreadyExists):
-			http.Error(w, err.Error(), http.StatusConflict)
+		case errors.Is(txErr, database.ErrFavoriteAlreadyExists):
+			http.Error(w, txErr.Error(), http.StatusConflict)
 		default:
 			http.Error(w, "Failed to add to favorites", http.StatusInternalServerError)
 		}
 		return
 	}
+
+	payload := map[string]string{"node_id": nodeID}
+	eventMsg := map[string]interface{}{"event_type": "favorite_added", "payload": payload}
+	eventBytes, _ := json.Marshal(eventMsg)
+	s.wsHub.PublishEvent(claims.UserID, eventBytes)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -53,11 +66,25 @@ func (s *Server) RemoveFavoriteHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 	nodeID := chi.URLParam(r, "nodeId")
 
-	_, err := s.store.RemoveFavorite(r.Context(), claims.UserID, nodeID)
-	if err != nil {
+	txErr := s.store.ExecTx(r.Context(), func(q *database.Queries) error {
+		_, err := q.RemoveFavorite(r.Context(), claims.UserID, nodeID)
+		if err != nil {
+			return err
+		}
+
+		payload := map[string]string{"node_id": nodeID}
+		return q.LogEvent(r.Context(), claims.UserID, "favorite_removed", payload)
+	})
+
+	if txErr != nil {
 		http.Error(w, "Failed to remove from favorites", http.StatusInternalServerError)
 		return
 	}
+
+	payload := map[string]string{"node_id": nodeID}
+	eventMsg := map[string]interface{}{"event_type": "favorite_removed", "payload": payload}
+	eventBytes, _ := json.Marshal(eventMsg)
+	s.wsHub.PublishEvent(claims.UserID, eventBytes)
 
 	w.WriteHeader(http.StatusNoContent)
 }

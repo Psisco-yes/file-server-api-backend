@@ -69,7 +69,7 @@ func TestMain(m *testing.M) {
 	}
 
 	wsHub := websocket.NewHub()
-	store := database.NewStore(pool, wsHub)
+	store := database.NewStore(pool)
 	cfg := &config.Config{JWT: config.JWTConfig{Secret: "api_test_secret"}}
 	testServer = NewServer(cfg, store, localStorage, wsHub)
 

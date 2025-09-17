@@ -56,7 +56,7 @@ func main() {
 	wsHub := websocket.NewHub()
 	go wsHub.Run()
 
-	store := database.NewStore(dbpool, wsHub)
+	store := database.NewStore(dbpool)
 	server := api.NewServer(cfg, store, localStorage, wsHub)
 
 	r := chi.NewRouter()

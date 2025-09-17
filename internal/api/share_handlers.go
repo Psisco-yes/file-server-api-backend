@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"serwer-plikow/internal/database"
+	"serwer-plikow/internal/models"
 	"strconv"
 	"time"
 
@@ -107,27 +108,45 @@ func (s *Server) ShareNodeHandler(w http.ResponseWriter, r *http.Request) {
 		Permissions: req.Permissions,
 	}
 
-	share, err := s.store.ShareNode(r.Context(), params)
-	if err != nil {
+	var createdShare *models.Share
+
+	txErr := s.store.ExecTx(r.Context(), func(q *database.Queries) error {
+		var txErr error
+		createdShare, txErr = q.ShareNode(r.Context(), params)
+		if txErr != nil {
+			return txErr
+		}
+
+		payload := map[string]interface{}{
+			"share_info": createdShare,
+			"node_info":  node,
+		}
+		return q.LogEvent(r.Context(), recipient.ID, "node_shared_with_you", payload)
+	})
+
+	if txErr != nil {
 		switch {
-		case errors.Is(err, database.ErrShareAlreadyExists):
-			http.Error(w, err.Error(), http.StatusConflict)
+		case errors.Is(txErr, database.ErrShareAlreadyExists):
+			http.Error(w, txErr.Error(), http.StatusConflict)
+		case errors.Is(txErr, database.ErrRecipientNotFound):
+			http.Error(w, "Recipient user not found", http.StatusNotFound)
 		default:
-			log.Printf("ERROR: Failed to create share record: %v", err)
+			log.Printf("ERROR: Failed to create share record: %v", txErr)
 			http.Error(w, "Failed to share node", http.StatusInternalServerError)
 		}
 		return
 	}
 
 	payload := map[string]interface{}{
-		"share_info": share,
+		"share_info": createdShare,
 		"node_info":  node,
 	}
-
-	s.store.LogEvent(r.Context(), recipient.ID, "node_shared_with_you", payload)
+	eventMsg := map[string]interface{}{"event_type": "node_shared_with_you", "payload": payload}
+	eventBytes, _ := json.Marshal(eventMsg)
+	s.wsHub.PublishEvent(recipient.ID, eventBytes)
 
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(share)
+	json.NewEncoder(w).Encode(createdShare)
 }
 
 // ListSharingUsersHandler retrieves a list of users who have shared items with the current user.
@@ -246,13 +265,26 @@ func (s *Server) DeleteShareHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.store.DeleteShare(r.Context(), shareID, claims.UserID); err != nil {
+	txErr := s.store.ExecTx(r.Context(), func(q *database.Queries) error {
+		err := q.DeleteShare(r.Context(), shareID, claims.UserID)
+		if err != nil {
+			return err
+		}
+
+		payload := map[string]string{"node_id": shareInfo.NodeID}
+		return q.LogEvent(r.Context(), shareInfo.RecipientID, "share_revoked_for_you", payload)
+	})
+
+	if txErr != nil {
+		log.Printf("ERROR: Failed to delete share in transaction: %v", txErr)
 		http.Error(w, "Failed to delete share", http.StatusInternalServerError)
 		return
 	}
 
 	payload := map[string]string{"node_id": shareInfo.NodeID}
-	s.store.LogEvent(r.Context(), shareInfo.RecipientID, "share_revoked_for_you", payload)
+	eventMsg := map[string]interface{}{"event_type": "share_revoked_for_you", "payload": payload}
+	eventBytes, _ := json.Marshal(eventMsg)
+	s.wsHub.PublishEvent(shareInfo.RecipientID, eventBytes)
 
 	w.WriteHeader(http.StatusNoContent)
 }
