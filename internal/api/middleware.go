@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"serwer-plikow/internal/auth"
+	"strconv"
 	"strings"
 )
 
@@ -44,4 +45,29 @@ func GetUserFromContext(ctx context.Context) *auth.AppClaims {
 		return claims
 	}
 	return nil
+}
+
+const (
+	DefaultLimit = 100
+	MaxLimit     = 1000
+)
+
+func parsePagination(r *http.Request) (limit, offset int) {
+	limitStr := r.URL.Query().Get("limit")
+	offsetStr := r.URL.Query().Get("offset")
+
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		limit = DefaultLimit
+	}
+	if limit > MaxLimit {
+		limit = MaxLimit
+	}
+
+	offset, err = strconv.Atoi(offsetStr)
+	if err != nil || offset < 0 {
+		offset = 0
+	}
+
+	return limit, offset
 }

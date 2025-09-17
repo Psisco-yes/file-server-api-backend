@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Funkcja pomocnicza do tworzenia udziału
 func createTestShare(t *testing.T, params ShareNodeParams) *models.Share {
 	share, err := testStore.ShareNode(context.Background(), params)
 	require.NoError(t, err)
@@ -21,7 +20,6 @@ func TestShareNode(t *testing.T) {
 	recipientID := createTestUserForNodes(t, "recipient_user")
 	node := createTestNode(t, CreateNodeParams{ID: "share_node_1", OwnerID: sharerID, Name: "Shared File", NodeType: "file"})
 
-	// Arrange
 	params := ShareNodeParams{
 		NodeID:      node.ID,
 		SharerID:    sharerID,
@@ -29,10 +27,8 @@ func TestShareNode(t *testing.T) {
 		Permissions: "read",
 	}
 
-	// Act
 	share := createTestShare(t, params)
 
-	// Assert
 	require.Equal(t, params.NodeID, share.NodeID)
 	require.Equal(t, params.SharerID, share.SharerID)
 	require.Equal(t, params.RecipientID, share.RecipientID)
@@ -40,7 +36,6 @@ func TestShareNode(t *testing.T) {
 	require.NotZero(t, share.ID)
 	require.NotZero(t, share.SharedAt)
 
-	// Test duplikatu
 	_, err := testStore.ShareNode(context.Background(), params)
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrShareAlreadyExists)
@@ -55,15 +50,13 @@ func TestGetSharingUsers(t *testing.T) {
 	node3 := createTestNode(t, CreateNodeParams{ID: "share_list_node3", OwnerID: sharer2ID, Name: "File 3", NodeType: "file"})
 
 	createTestShare(t, ShareNodeParams{NodeID: node1.ID, SharerID: sharer1ID, RecipientID: recipientID, Permissions: "read"})
-	createTestShare(t, ShareNodeParams{NodeID: node2.ID, SharerID: sharer1ID, RecipientID: recipientID, Permissions: "read"}) // Drugi plik od tego samego usera
+	createTestShare(t, ShareNodeParams{NodeID: node2.ID, SharerID: sharer1ID, RecipientID: recipientID, Permissions: "read"})
 	createTestShare(t, ShareNodeParams{NodeID: node3.ID, SharerID: sharer2ID, RecipientID: recipientID, Permissions: "read"})
 
-	users, err := testStore.GetSharingUsers(context.Background(), recipientID)
+	users, err := testStore.GetSharingUsers(context.Background(), recipientID, 100, 0)
 	require.NoError(t, err)
-	// Powinno być 2 użytkowników, bez duplikatów
 	require.Len(t, users, 2)
 
-	// Sprawdź, czy zwrócono poprawnych użytkowników
 	userMap := make(map[int64]string)
 	for _, u := range users {
 		userMap[u.ID] = u.Username
@@ -71,9 +64,8 @@ func TestGetSharingUsers(t *testing.T) {
 	require.Equal(t, "sharer1_for_list", userMap[sharer1ID])
 	require.Equal(t, "sharer2_for_list", userMap[sharer2ID])
 
-	// Sprawdź dla użytkownika, któremu nikt nic nie udostępnił
 	nobodyID := createTestUserForNodes(t, "nobody")
-	users, err = testStore.GetSharingUsers(context.Background(), nobodyID)
+	users, err = testStore.GetSharingUsers(context.Background(), nobodyID, 100, 0)
 	require.NoError(t, err)
 	require.Len(t, users, 0)
 }
@@ -90,10 +82,9 @@ func TestListDirectlySharedNodes(t *testing.T) {
 	createTestShare(t, ShareNodeParams{NodeID: node2.ID, SharerID: sharerID, RecipientID: recipientID, Permissions: "read"})
 	createTestShare(t, ShareNodeParams{NodeID: node3.ID, SharerID: otherSharerID, RecipientID: recipientID, Permissions: "read"})
 
-	nodes, err := testStore.ListDirectlySharedNodes(context.Background(), recipientID, sharerID)
+	nodes, err := testStore.ListDirectlySharedNodes(context.Background(), recipientID, sharerID, 100, 0)
 	require.NoError(t, err)
 	require.Len(t, nodes, 2)
-	// Sprawdź sortowanie: foldery pierwsze, potem alfabetycznie
 	require.Equal(t, "Z_Folder", nodes[0].Name)
 	require.Equal(t, "A_File", nodes[1].Name)
 }
@@ -106,10 +97,8 @@ func TestHasAccessToNode(t *testing.T) {
 	file := createTestNode(t, CreateNodeParams{ID: "h_access_file", OwnerID: sharerID, ParentID: &subFolder.ID, Name: "file.txt", NodeType: "file"})
 	unrelatedNode := createTestNode(t, CreateNodeParams{ID: "h_access_unrelated", OwnerID: sharerID, Name: "Unrelated", NodeType: "file"})
 
-	// Udostępnij folder nadrzędny
 	createTestShare(t, ShareNodeParams{NodeID: folder.ID, SharerID: sharerID, RecipientID: recipientID, Permissions: "read"})
 
-	// Sprawdź dostęp do udostępnionego folderu i jego dzieci
 	hasAccess, err := testStore.HasAccessToNode(context.Background(), file.ID, recipientID)
 	require.NoError(t, err)
 	require.True(t, hasAccess, "Should have access to child file")
@@ -122,12 +111,10 @@ func TestHasAccessToNode(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, hasAccess, "Should have access to shared folder itself")
 
-	// Sprawdź brak dostępu do nieudostępnionego pliku
 	hasAccess, err = testStore.HasAccessToNode(context.Background(), unrelatedNode.ID, recipientID)
 	require.NoError(t, err)
 	require.False(t, hasAccess, "Should not have access to unrelated node")
 
-	// Właściciel nie ma "dostępu przez udostępnienie" do własnych plików (chyba, że udostępnił sam sobie)
 	hasAccess, err = testStore.HasAccessToNode(context.Background(), file.ID, sharerID)
 	require.NoError(t, err)
 	require.False(t, hasAccess, "Owner should not have access via shares table")
@@ -143,11 +130,10 @@ func TestGetOutgoingShares(t *testing.T) {
 	createTestShare(t, ShareNodeParams{NodeID: node1.ID, SharerID: sharerID, RecipientID: recipient1ID, Permissions: "read"})
 	createTestShare(t, ShareNodeParams{NodeID: node2.ID, SharerID: sharerID, RecipientID: recipient2ID, Permissions: "write"})
 
-	shares, err := testStore.GetOutgoingShares(context.Background(), sharerID)
+	shares, err := testStore.GetOutgoingShares(context.Background(), sharerID, 100, 0)
 	require.NoError(t, err)
 	require.Len(t, shares, 2)
 
-	// Weryfikacja
 	shareMap := make(map[string]OutgoingShare)
 	for _, s := range shares {
 		shareMap[s.NodeID] = s
@@ -172,22 +158,18 @@ func TestDeleteAndGetShareByID(t *testing.T) {
 
 	share := createTestShare(t, ShareNodeParams{NodeID: node.ID, SharerID: sharerID, RecipientID: recipientID, Permissions: "read"})
 
-	// Test GetShareByID - pozytywny
 	foundShare, err := testStore.GetShareByID(context.Background(), share.ID, sharerID)
 	require.NoError(t, err)
 	require.NotNil(t, foundShare)
 	require.Equal(t, share.ID, foundShare.ID)
 
-	// Test GetShareByID - negatywny (inny user)
 	foundShare, err = testStore.GetShareByID(context.Background(), share.ID, otherUserID)
 	require.NoError(t, err)
 	require.Nil(t, foundShare)
 
-	// Test DeleteShare
 	err = testStore.DeleteShare(context.Background(), share.ID, sharerID)
 	require.NoError(t, err)
 
-	// Weryfikacja usunięcia
 	foundShare, err = testStore.GetShareByID(context.Background(), share.ID, sharerID)
 	require.NoError(t, err)
 	require.Nil(t, foundShare)

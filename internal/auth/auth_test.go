@@ -23,11 +23,9 @@ func TestCheckPasswordHash(t *testing.T) {
 	hash, err := HashPassword(password)
 	require.NoError(t, err)
 
-	// Pozytywny test
 	match := CheckPasswordHash(password, hash)
 	require.True(t, match, "Password should match the hash")
 
-	// Negatywny test
 	wrongPassword := "wrongPassword"
 	match = CheckPasswordHash(wrongPassword, hash)
 	require.False(t, match, "Wrong password should not match the hash")
@@ -40,12 +38,10 @@ func TestGenerateAndVerifyJWT(t *testing.T) {
 		Username: "testuser",
 	}
 
-	// Test generowania
 	tokenString, err := GenerateJWT(user, secret)
 	require.NoError(t, err)
 	require.NotEmpty(t, tokenString)
 
-	// Test weryfikacji poprawnego tokenu
 	claims, err := VerifyJWT(tokenString, secret)
 	require.NoError(t, err)
 	require.NotNil(t, claims)
@@ -53,13 +49,10 @@ func TestGenerateAndVerifyJWT(t *testing.T) {
 	require.Equal(t, user.Username, claims.Username)
 	require.WithinDuration(t, time.Now().Add(24*time.Hour), claims.ExpiresAt.Time, 5*time.Second)
 
-	// Test weryfikacji z złym sekretem
 	_, err = VerifyJWT(tokenString, "wrong_secret")
 	require.Error(t, err)
 	require.ErrorIs(t, err, jwt.ErrSignatureInvalid)
 
-	// Test weryfikacji przeterminowanego tokenu
-	// Tworzymy token, który był ważny tylko przez 1ms i już wygasł
 	expirationTime := time.Now().Add(-1 * time.Minute)
 	claimsExpired := &AppClaims{
 		UserID:   user.ID,

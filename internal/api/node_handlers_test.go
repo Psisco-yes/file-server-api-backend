@@ -18,7 +18,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Funkcja pomocnicza do tworzenia węzłów w testach API
 func createTestNodeAPI(t *testing.T, name, nodeType string, parentID *string, ownerID int64) *models.Node {
 	id, err := testServer.generateUniqueID(context.Background())
 	require.NoError(t, err)
@@ -43,17 +42,14 @@ func createTestNodeAPI(t *testing.T, name, nodeType string, parentID *string, ow
 }
 
 func TestAPI_CreateFolder_Success(t *testing.T) {
-	// Arrange
-	payload := CreateFolderRequest{Name: "Nowy_Folder_Sukces"} // Unikalna nazwa dla tego testu
+	payload := CreateFolderRequest{Name: "Nowy_Folder_Sukces"}
 	body, _ := json.Marshal(payload)
 	req := httptest.NewRequest("POST", "/api/v1/nodes/folder", bytes.NewReader(body))
 	rr := httptest.NewRecorder()
 
-	// Act
 	req = req.WithContext(context.WithValue(req.Context(), userContextKey, testUserClaims))
 	http.HandlerFunc(testServer.CreateFolderHandler).ServeHTTP(rr, req)
 
-	// Assert
 	require.Equal(t, http.StatusCreated, rr.Code)
 	var createdNode models.Node
 	err := json.Unmarshal(rr.Body.Bytes(), &createdNode)
@@ -62,26 +58,21 @@ func TestAPI_CreateFolder_Success(t *testing.T) {
 }
 
 func TestAPI_CreateFolder_EmptyName(t *testing.T) {
-	// Arrange
 	payload := CreateFolderRequest{Name: "  "}
 	body, _ := json.Marshal(payload)
 	req := httptest.NewRequest("POST", "/api/v1/nodes/folder", bytes.NewReader(body))
 	rr := httptest.NewRecorder()
 
-	// Act
 	req = req.WithContext(context.WithValue(req.Context(), userContextKey, testUserClaims))
 	http.HandlerFunc(testServer.CreateFolderHandler).ServeHTTP(rr, req)
 
-	// Assert
 	require.Equal(t, http.StatusBadRequest, rr.Code)
 }
 
 func TestAPI_CreateFolder_NameConflict(t *testing.T) {
-	// Arrange: Krok 1
 	folderName := "Folder_Konfliktowy_Final"
 	createTestNodeAPI(t, folderName, "folder", nil, testUserClaims.UserID)
 
-	// Sprawdzenie #1 - Czy na pewno jest w bazie?
 	var initialCount int
 	err := testServer.store.GetPool().QueryRow(context.Background(),
 		"SELECT count(*) FROM nodes WHERE name=$1 AND owner_id=$2 AND parent_id IS NULL",
@@ -89,30 +80,25 @@ func TestAPI_CreateFolder_NameConflict(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, initialCount, "SETUP FAILED: Node should be in DB before API call")
 
-	// Arrange: Krok 2
 	payload := CreateFolderRequest{Name: folderName}
 	body, _ := json.Marshal(payload)
 	req := httptest.NewRequest("POST", "/api/v1/nodes/folder", bytes.NewReader(body))
 	rr := httptest.NewRecorder()
 
-	// Act
 	req = req.WithContext(context.WithValue(req.Context(), userContextKey, testUserClaims))
 	http.HandlerFunc(testServer.CreateFolderHandler).ServeHTTP(rr, req)
 
-	// Sprawdzenie #2 - Ile jest teraz takich folderów w bazie?
 	var finalCount int
 	err = testServer.store.GetPool().QueryRow(context.Background(),
 		"SELECT count(*) FROM nodes WHERE name=$1 AND owner_id=$2 AND parent_id IS NULL",
 		folderName, testUserClaims.UserID).Scan(&finalCount)
 	require.NoError(t, err)
 
-	// Logujemy, żeby zobaczyć, co się stało
 	t.Logf("Final count of nodes with name '%s': %d", folderName, finalCount)
 	if rr.Code == http.StatusCreated {
 		t.Logf("Received unexpected 201 Created. Response body: %s", rr.Body.String())
 	}
 
-	// Assert
 	require.Equal(t, 1, finalCount, "The number of nodes with this name should not increase")
 	require.Equal(t, http.StatusConflict, rr.Code, "Expected a conflict when creating a folder with a duplicate name")
 }

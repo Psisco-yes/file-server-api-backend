@@ -38,7 +38,7 @@ func (s *Server) HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
 		status["status"] = "error"
 		status["database"] = "disconnected"
 		log.Printf("Health check failed: database ping error: %v", err)
-		w.WriteHeader(http.StatusServiceUnavailable) // Kod 503
+		w.WriteHeader(http.StatusServiceUnavailable)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

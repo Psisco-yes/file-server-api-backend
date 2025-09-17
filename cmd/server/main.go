@@ -74,43 +74,58 @@ func main() {
 	r.Use(middleware.Recoverer)
 	r.Use(api.MetricsMiddleware)
 
-	r.Get("/swagger/*", httpSwagger.Handler(
-		httpSwagger.URL("/swagger/doc.json"),
-	))
-
+	r.Get("/swagger/*", httpSwagger.Handler(httpSwagger.URL("/swagger/doc.json")))
 	r.Get("/ws", server.ServeWsHandler)
-
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Serwer plików działa! Dokumentacja dostępna pod /swagger/index.html"))
 	})
-
-	r.Post("/api/v1/auth/login", server.LoginHandler)
-
 	r.Get("/health", server.HealthCheckHandler)
 	r.Get("/metrics", metricsHandler())
 
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Use(server.AuthMiddleware)
-		r.Get("/me", server.GetCurrentUserHandler)
-		r.Get("/nodes", server.ListNodesHandler)
-		r.Post("/nodes/folder", server.CreateFolderHandler)
-		r.Post("/nodes/file", server.UploadFileHandler)
-		r.Get("/nodes/{nodeId}/download", server.DownloadFileHandler)
-		r.Patch("/nodes/{nodeId}", server.UpdateNodeHandler)
-		r.Delete("/nodes/{nodeId}", server.DeleteNodeHandler)
-		r.Post("/nodes/{nodeId}/restore", server.RestoreNodeHandler)
-		r.Post("/nodes/{nodeId}/favorite", server.AddFavoriteHandler)
-		r.Delete("/nodes/{nodeId}/favorite", server.RemoveFavoriteHandler)
-		r.Get("/nodes/archive", server.DownloadArchiveHandler)
-		r.Get("/trash", server.ListTrashHandler)
-		r.Delete("/trash/purge", server.PurgeTrashHandler)
-		r.Get("/favorites", server.ListFavoritesHandler)
-		r.Post("/nodes/{nodeId}/share", server.ShareNodeHandler)
-		r.Get("/shares/incoming/users", server.ListSharingUsersHandler)
-		r.Get("/shares/incoming/nodes", server.ListSharedNodesHandler)
-		r.Get("/shares/outgoing", server.ListOutgoingSharesHandler)
-		r.Delete("/shares/{shareId}", server.DeleteShareHandler)
-		r.Get("/events", server.GetEventsHandler)
+		r.Post("/auth/login", server.LoginHandler)
+
+		r.Group(func(r chi.Router) {
+			r.Use(server.AuthMiddleware)
+
+			r.Route("/me", func(r chi.Router) {
+				r.Get("/", server.GetCurrentUserHandler)
+				r.Get("/storage", server.GetStorageUsageHandler)
+			})
+
+			r.Route("/nodes", func(r chi.Router) {
+				r.Get("/", server.ListNodesHandler)
+				r.Post("/folder", server.CreateFolderHandler)
+				r.Post("/file", server.UploadFileHandler)
+				r.Get("/archive", server.DownloadArchiveHandler)
+
+				r.Route("/{nodeId}", func(r chi.Router) {
+					r.Get("/download", server.DownloadFileHandler)
+					r.Patch("/", server.UpdateNodeHandler)
+					r.Delete("/", server.DeleteNodeHandler)
+					r.Post("/restore", server.RestoreNodeHandler)
+					r.Post("/favorite", server.AddFavoriteHandler)
+					r.Delete("/favorite", server.RemoveFavoriteHandler)
+					r.Post("/share", server.ShareNodeHandler)
+				})
+			})
+
+			r.Route("/shares", func(r chi.Router) {
+				r.Get("/incoming/users", server.ListSharingUsersHandler)
+				r.Get("/incoming/nodes", server.ListSharedNodesHandler)
+				r.Get("/outgoing", server.ListOutgoingSharesHandler)
+				r.Delete("/{shareId}", server.DeleteShareHandler)
+			})
+
+			r.Route("/trash", func(r chi.Router) {
+				r.Get("/", server.ListTrashHandler)
+				r.Delete("/purge", server.PurgeTrashHandler)
+			})
+
+			r.Get("/favorites", server.ListFavoritesHandler)
+
+			r.Get("/events", server.GetEventsHandler)
+		})
 	})
 
 	log.Println("Uruchamianie serwera na porcie :8080")

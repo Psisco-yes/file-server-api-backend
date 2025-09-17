@@ -100,8 +100,9 @@ func (s *Server) RemoveFavoriteHandler(w http.ResponseWriter, r *http.Request) {
 // @Router       /favorites [get]
 func (s *Server) ListFavoritesHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
+	limit, offset := parsePagination(r)
 
-	nodes, err := s.store.ListFavorites(r.Context(), claims.UserID)
+	nodes, err := s.store.ListFavorites(r.Context(), claims.UserID, limit, offset)
 	if err != nil {
 		http.Error(w, "Failed to list favorites", http.StatusInternalServerError)
 		return

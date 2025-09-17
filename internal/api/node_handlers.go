@@ -59,7 +59,6 @@ func (s *Server) generateUniqueID(ctx context.Context) (string, error) {
 	return "", fmt.Errorf("failed to generate a unique ID after %d attempts", maxRetries)
 }
 
-// CreateFolderHandler obsługuje tworzenie nowego folderu.
 // @Summary      Create a new folder
 // @Description  Creates a new folder in a specified parent folder or in the root directory if parent_id is omitted.
 // @Tags         nodes
@@ -151,84 +150,32 @@ func (s *Server) CreateFolderHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(createdNode)
 }
 
-// ListNodesHandler obsługuje listowanie plików i folderów.
-// @Summary      List nodes
-// @Description  Lists files and folders. If 'shared_by_username' is provided, it lists shared content. Otherwise, it lists the user's own content.
+// @Summary      List user's own nodes
+// @Description  Lists the user's own files and folders in a specified parent folder or in the root directory.
 // @Tags         nodes
 // @Produce      json
 // @Security     BearerAuth
-// @Param        parent_id          query     string  false  "ID of the parent folder to list. Omit for root."
-// @Param        shared_by_username query     string  false  "Username of the person who shared the content."
-// @Success      200                {array}   NodeResponse
-// @Failure      401                {string}  string "Unauthorized"
-// @Failure      403                {string}  string "Forbidden"
-// @Failure      404                {string}  string "Not Found"
-// @Failure      500                {string}  string "Internal Server Error"
+// @Param        parent_id  query     string  false  "ID of the parent folder to list. Omit for root."
+// @Param        limit      query     int     false  "Number of items to return" default(100)
+// @Param        offset     query     int     false  "Offset for pagination" default(0)
+// @Success      200        {array}   NodeResponse
+// @Failure      401        {string}  string "Unauthorized"
+// @Failure      500        {string}  string "Internal Server Error"
 // @Router       /nodes [get]
 func (s *Server) ListNodesHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
+	limit, offset := parsePagination(r)
 
 	parentIDStr := r.URL.Query().Get("parent_id")
-	sharerUsername := r.URL.Query().Get("shared_by_username")
-
-	if sharerUsername == "" {
-		var parentID *string
-		if parentIDStr != "" {
-			parentID = &parentIDStr
-		}
-
-		nodes, err := s.store.GetNodesByParentID(r.Context(), claims.UserID, parentID)
-		if err != nil {
-			log.Printf("ERROR: Failed to list own nodes for user %d: %v", claims.UserID, err)
-			http.Error(w, "Failed to list nodes", http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(nodes)
-		return
+	var parentID *string
+	if parentIDStr != "" {
+		parentID = &parentIDStr
 	}
 
-	sharer, err := s.store.GetUserByUsername(r.Context(), sharerUsername)
+	nodes, err := s.store.GetNodesByParentID(r.Context(), claims.UserID, parentID, limit, offset)
 	if err != nil {
-		log.Printf("ERROR: Failed to find sharer '%s': %v", sharerUsername, err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-	if sharer == nil {
-		http.Error(w, "Sharer not found", http.StatusNotFound)
-		return
-	}
-
-	if parentIDStr == "" {
-		nodes, err := s.store.ListDirectlySharedNodes(r.Context(), claims.UserID, sharer.ID)
-		if err != nil {
-			log.Printf("ERROR: Failed to list directly shared nodes for user %d from sharer %d: %v", claims.UserID, sharer.ID, err)
-			http.Error(w, "Failed to list shared nodes", http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(nodes)
-		return
-	}
-
-	hasAccess, err := s.store.HasAccessToNode(r.Context(), parentIDStr, claims.UserID)
-	if err != nil {
-		log.Printf("ERROR: Failed to check access for user %d to node %s: %v", claims.UserID, parentIDStr, err)
-		http.Error(w, "Failed to check access permissions", http.StatusInternalServerError)
-		return
-	}
-
-	isOwner := sharer.ID == claims.UserID
-
-	if !hasAccess && !isOwner {
-		http.Error(w, "Shared folder not found or access denied", http.StatusNotFound)
-		return
-	}
-
-	nodes, err := s.store.GetNodesByParentID(r.Context(), sharer.ID, &parentIDStr)
-	if err != nil {
-		log.Printf("ERROR: Failed to list children for shared node %s: %v", parentIDStr, err)
-		http.Error(w, "Failed to list shared nodes content", http.StatusInternalServerError)
+		log.Printf("ERROR: Failed to list own nodes for user %d: %v", claims.UserID, err)
+		http.Error(w, "Failed to list nodes", http.StatusInternalServerError)
 		return
 	}
 
@@ -236,9 +183,8 @@ func (s *Server) ListNodesHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(nodes)
 }
 
-// UploadFileHandler obsługuje wgrywanie jednego lub więcej plików.
 // @Summary      Upload file(s)
-// @Description  Uploads one or more files to a specified parent folder or the root directory. Use multipart/form-data.
+// @Description  Uploads one or more files to a specified parent folder or the root directory. Use multipart/form-data. The total size of the request payload cannot exceed 1GB. Exceeding the user's storage quota will also result in an error.
 // @Tags         nodes
 // @Accept       multipart/form-data
 // @Produce      json
@@ -248,15 +194,16 @@ func (s *Server) ListNodesHandler(w http.ResponseWriter, r *http.Request) {
 // @Success      201        {array}   NodeResponse
 // @Failure      400        {string}  string "Bad Request"
 // @Failure      401        {string}  string "Unauthorized"
+// @Failure      413        {string}  string "Payload Too Large - either the request exceeds 1GB or the user's storage quota is exceeded."
 // @Failure      500        {string}  string "Internal Server Error"
 // @Router       /nodes/file [post]
 func (s *Server) UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<30) // 1GB limit na CAŁE zapytanie
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<30) // TODO: zaimplementować chunked upload!!!
 
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		http.Error(w, "Error parsing multipart form", http.StatusBadRequest)
+	if err := r.ParseMultipartForm(32 << 20); err != nil { // 32MB w pamięci
+		http.Error(w, "Error parsing multipart form: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -273,6 +220,23 @@ func (s *Server) UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 	files := r.MultipartForm.File["file"]
 	if len(files) == 0 {
 		http.Error(w, "No files uploaded", http.StatusBadRequest)
+		return
+	}
+
+	currentUser, err := s.store.GetUserByUsername(r.Context(), claims.Username)
+	if err != nil || currentUser == nil {
+		log.Printf("ERROR: Could not retrieve current user data for quota check: %v", err)
+		http.Error(w, "Could not verify user for upload", http.StatusInternalServerError)
+		return
+	}
+
+	var totalUploadSize int64
+	for _, handler := range files {
+		totalUploadSize += handler.Size
+	}
+
+	if currentUser.StorageUsedBytes+totalUploadSize > currentUser.StorageQuotaBytes {
+		http.Error(w, "Storage quota exceeded", http.StatusRequestEntityTooLarge)
 		return
 	}
 
@@ -312,11 +276,17 @@ func (s *Server) UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 		var createdNode *models.Node
 
 		txErr := s.store.ExecTx(r.Context(), func(q *database.Queries) error {
-			var err error
-			createdNode, err = q.CreateNode(r.Context(), params)
-			if err != nil {
-				return err
+			var txErr error
+			createdNode, txErr = q.CreateNode(r.Context(), params)
+			if txErr != nil {
+				return txErr
 			}
+
+			txErr = q.UpdateUserStorage(r.Context(), claims.UserID, sizeBytes)
+			if txErr != nil {
+				return txErr
+			}
+
 			return q.LogEvent(r.Context(), claims.UserID, "node_created", createdNode)
 		})
 
@@ -344,7 +314,6 @@ func (s *Server) UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(createdNodes)
 }
 
-// DownloadFileHandler obsługuje pobieranie pliku.
 // @Summary      Download a file
 // @Description  Downloads a single file by its ID.
 // @Tags         nodes
@@ -401,7 +370,6 @@ func (s *Server) DownloadFileHandler(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, fileStream)
 }
 
-// DeleteNodeHandler przenosi plik lub folder do kosza.
 // @Summary      Move node to trash
 // @Description  Moves a file or a folder (and its contents) to the trash (soft delete).
 // @Tags         nodes
@@ -456,7 +424,6 @@ type UpdateNodeRequest struct {
 	ParentID *string `json:"parent_id"`
 }
 
-// UpdateNodeHandler obsługuje zmianę nazwy lub przenoszenie pliku/folderu.
 // @Summary      Update a node
 // @Description  Updates a node's properties, such as its name or parent folder.
 // @Tags         nodes
@@ -606,7 +573,6 @@ func (s *Server) UpdateNodeHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(updatedNode)
 }
 
-// DownloadArchiveHandler obsługuje pobieranie wielu plików/folderów jako archiwum ZIP.
 // @Summary      Download an archive
 // @Description  Downloads multiple files and/or folders as a single ZIP archive.
 // @Tags         nodes
@@ -651,7 +617,7 @@ func (s *Server) DownloadArchiveHandler(w http.ResponseWriter, r *http.Request) 
 		nodePaths[node.ID] = fullPath
 
 		if node.NodeType == "folder" {
-			children, err := s.store.GetNodesByParentID(r.Context(), claims.UserID, &node.ID)
+			children, err := s.store.GetNodesByParentID(r.Context(), claims.UserID, &node.ID, MaxLimit, 0) // TODO: unlimited limit for zipping
 			if err != nil {
 				return fmt.Errorf("could not list children of folder %s: %w", node.Name, err)
 			}

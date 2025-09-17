@@ -45,7 +45,6 @@ type ShareResponse struct {
 	SharedAt    time.Time `json:"shared_at"`
 }
 
-// ShareNodeHandler handles sharing a node with another user.
 // @Summary      Share a node
 // @Description  Shares a file or folder with another user, granting them read or write permissions.
 // @Tags         shares
@@ -149,7 +148,6 @@ func (s *Server) ShareNodeHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(createdShare)
 }
 
-// ListSharingUsersHandler retrieves a list of users who have shared items with the current user.
 // @Summary      List users who shared with me
 // @Description  Gets a unique list of users who have shared one or more items with the currently authenticated user. This is the root level for the "Shared with me" view.
 // @Tags         shares
@@ -161,8 +159,9 @@ func (s *Server) ShareNodeHandler(w http.ResponseWriter, r *http.Request) {
 // @Router       /shares/incoming/users [get]
 func (s *Server) ListSharingUsersHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
+	limit, offset := parsePagination(r)
 
-	users, err := s.store.GetSharingUsers(r.Context(), claims.UserID)
+	users, err := s.store.GetSharingUsers(r.Context(), claims.UserID, limit, offset)
 	if err != nil {
 		http.Error(w, "Failed to retrieve list of sharing users", http.StatusInternalServerError)
 		return
@@ -172,21 +171,24 @@ func (s *Server) ListSharingUsersHandler(w http.ResponseWriter, r *http.Request)
 	json.NewEncoder(w).Encode(users)
 }
 
-// ListSharedNodesHandler lists the content shared by a specific user.
 // @Summary      List items shared by a user
-// @Description  Lists the files and folders directly shared with the current user by a specific sharer.
+// @Description  Lists files and folders shared with the current user by a specific sharer. Can list the root of shared items or the content of a subfolder.
 // @Tags         shares
 // @Produce      json
 // @Security     BearerAuth
-// @Param        sharer_username  query     string  true  "Username of the person who shared the content"
+// @Param        sharer_username  query     string  true   "Username of the person who shared the content"
+// @Param        parent_id        query     string  false  "ID of the shared parent folder to list. Omit for the root of shared items."
+// @Param        limit            query     int     false  "Number of items to return" default(100)
+// @Param        offset           query     int     false  "Offset for pagination" default(0)
 // @Success      200              {array}   NodeResponse
 // @Failure      400              {string}  string "Bad Request"
 // @Failure      401              {string}  string "Unauthorized"
-// @Failure      404              {string}  string "Not Found"
+// @Failure      404              {string}  string "Not Found or access denied"
 // @Failure      500              {string}  string "Internal Server Error"
 // @Router       /shares/incoming/nodes [get]
 func (s *Server) ListSharedNodesHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
+	limit, offset := parsePagination(r)
 
 	sharerUsername := r.URL.Query().Get("sharer_username")
 	if sharerUsername == "" {
@@ -195,14 +197,46 @@ func (s *Server) ListSharedNodesHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	sharer, err := s.store.GetUserByUsername(r.Context(), sharerUsername)
-	if err != nil || sharer == nil {
+	if err != nil {
+		log.Printf("ERROR: Failed to find sharer '%s': %v", sharerUsername, err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	if sharer == nil {
 		http.Error(w, "Sharer not found", http.StatusNotFound)
 		return
 	}
 
-	nodes, err := s.store.ListDirectlySharedNodes(r.Context(), claims.UserID, sharer.ID)
+	parentIDStr := r.URL.Query().Get("parent_id")
+
+	if parentIDStr == "" {
+		nodes, err := s.store.ListDirectlySharedNodes(r.Context(), claims.UserID, sharer.ID, limit, offset)
+		if err != nil {
+			log.Printf("ERROR: Failed to list directly shared nodes for user %d from sharer %d: %v", claims.UserID, sharer.ID, err)
+			http.Error(w, "Failed to list shared nodes", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(nodes)
+		return
+	}
+
+	hasAccess, err := s.store.HasAccessToNode(r.Context(), parentIDStr, claims.UserID)
 	if err != nil {
-		http.Error(w, "Failed to list shared nodes", http.StatusInternalServerError)
+		log.Printf("ERROR: Failed to check access for user %d to node %s: %v", claims.UserID, parentIDStr, err)
+		http.Error(w, "Failed to check access permissions", http.StatusInternalServerError)
+		return
+	}
+
+	if !hasAccess {
+		http.Error(w, "Shared folder not found or access denied", http.StatusNotFound)
+		return
+	}
+
+	nodes, err := s.store.GetNodesByParentID(r.Context(), sharer.ID, &parentIDStr, limit, offset)
+	if err != nil {
+		log.Printf("ERROR: Failed to list children for shared node %s: %v", parentIDStr, err)
+		http.Error(w, "Failed to list shared nodes content", http.StatusInternalServerError)
 		return
 	}
 
@@ -210,7 +244,6 @@ func (s *Server) ListSharedNodesHandler(w http.ResponseWriter, r *http.Request) 
 	json.NewEncoder(w).Encode(nodes)
 }
 
-// ListOutgoingSharesHandler retrieves a list of shares created by the current user.
 // @Summary      List items I have shared
 // @Description  Gets a list of all items the currently authenticated user has shared with others.
 // @Tags         shares
@@ -222,8 +255,9 @@ func (s *Server) ListSharedNodesHandler(w http.ResponseWriter, r *http.Request) 
 // @Router       /shares/outgoing [get]
 func (s *Server) ListOutgoingSharesHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
+	limit, offset := parsePagination(r)
 
-	shares, err := s.store.GetOutgoingShares(r.Context(), claims.UserID)
+	shares, err := s.store.GetOutgoingShares(r.Context(), claims.UserID, limit, offset)
 	if err != nil {
 		http.Error(w, "Failed to retrieve outgoing shares", http.StatusInternalServerError)
 		return
@@ -233,7 +267,6 @@ func (s *Server) ListOutgoingSharesHandler(w http.ResponseWriter, r *http.Reques
 	json.NewEncoder(w).Encode(shares)
 }
 
-// DeleteShareHandler revokes a share.
 // @Summary      Revoke a share
 // @Description  Revokes a share entry. Only the original sharer can do this.
 // @Tags         shares

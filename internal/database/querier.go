@@ -107,7 +107,7 @@ func (q *Queries) AddFavorite(ctx context.Context, userID int64, nodeID string) 
 	_, err = q.db.Exec(ctx, query, userID, nodeID)
 	if err != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" { // unique_violation
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			return ErrFavoriteAlreadyExists
 		}
 		return err
@@ -125,7 +125,7 @@ func (q *Queries) RemoveFavorite(ctx context.Context, userID int64, nodeID strin
 	return res.RowsAffected() > 0, nil
 }
 
-func (q *Queries) ListFavorites(ctx context.Context, userID int64) ([]models.Node, error) {
+func (q *Queries) ListFavorites(ctx context.Context, userID int64, limit int, offset int) ([]models.Node, error) {
 	query := `
 		SELECT 
 			n.id, n.owner_id, n.parent_id, n.name, n.node_type, 
@@ -133,9 +133,9 @@ func (q *Queries) ListFavorites(ctx context.Context, userID int64) ([]models.Nod
 		FROM nodes n
 		JOIN user_favorites f ON n.id = f.node_id
 		WHERE f.user_id = $1 AND n.deleted_at IS NULL
-		ORDER BY n.name
+		ORDER BY n.name LIMIT $2 OFFSET $3
 	`
-	rows, err := q.db.Query(ctx, query, userID)
+	rows, err := q.db.Query(ctx, query, userID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -214,7 +214,7 @@ type SharingUser struct {
 	DisplayName string `json:"display_name"`
 }
 
-func (q *Queries) GetSharingUsers(ctx context.Context, recipientID int64) ([]SharingUser, error) {
+func (q *Queries) GetSharingUsers(ctx context.Context, recipientID int64, limit int, offset int) ([]SharingUser, error) {
 	query := `
 		SELECT DISTINCT ON (u.id)
 			u.id,
@@ -223,9 +223,9 @@ func (q *Queries) GetSharingUsers(ctx context.Context, recipientID int64) ([]Sha
 		FROM shares s
 		JOIN users u ON s.sharer_id = u.id
 		WHERE s.recipient_id = $1
-		ORDER BY u.id
+		ORDER BY u.id LIMIT $2 OFFSET $3
 	`
-	rows, err := q.db.Query(ctx, query, recipientID)
+	rows, err := q.db.Query(ctx, query, recipientID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +251,7 @@ func (q *Queries) GetSharingUsers(ctx context.Context, recipientID int64) ([]Sha
 	return users, nil
 }
 
-func (q *Queries) ListDirectlySharedNodes(ctx context.Context, recipientID int64, sharerID int64) ([]models.Node, error) {
+func (q *Queries) ListDirectlySharedNodes(ctx context.Context, recipientID int64, sharerID int64, limit int, offset int) ([]models.Node, error) {
 	query := `
 		SELECT 
 			n.id, 
@@ -266,10 +266,10 @@ func (q *Queries) ListDirectlySharedNodes(ctx context.Context, recipientID int64
 		FROM nodes n
 		JOIN shares s ON n.id = s.node_id
 		WHERE s.recipient_id = $1 AND s.sharer_id = $2 AND n.deleted_at IS NULL
-		ORDER BY n.node_type DESC, n.name
+		ORDER BY n.node_type DESC, n.name LIMIT $3 OFFSET $4
 	`
 
-	rows, err := q.db.Query(ctx, query, recipientID, sharerID)
+	rows, err := q.db.Query(ctx, query, recipientID, sharerID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -338,7 +338,7 @@ type OutgoingShare struct {
 	RecipientUsername string `json:"recipient_username"`
 }
 
-func (q *Queries) GetOutgoingShares(ctx context.Context, sharerID int64) ([]OutgoingShare, error) {
+func (q *Queries) GetOutgoingShares(ctx context.Context, sharerID int64, limit int, offset int) ([]OutgoingShare, error) {
 	query := `
 		SELECT 
 			s.id, s.node_id, s.sharer_id, s.recipient_id, s.permissions, s.shared_at,
@@ -349,9 +349,9 @@ func (q *Queries) GetOutgoingShares(ctx context.Context, sharerID int64) ([]Outg
 		JOIN nodes n ON s.node_id = n.id
 		JOIN users u ON s.recipient_id = u.id
 		WHERE s.sharer_id = $1
-		ORDER BY s.shared_at DESC
+		ORDER BY s.shared_at DESC LIMIT $2 OFFSET $3
 	`
-	rows, err := q.db.Query(ctx, query, sharerID)
+	rows, err := q.db.Query(ctx, query, sharerID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -464,7 +464,7 @@ func (q *Queries) CreateNode(ctx context.Context, arg CreateNodeParams) (*models
 	return &node, nil
 }
 
-func (q *Queries) GetNodesByParentID(ctx context.Context, ownerID int64, parentID *string) ([]models.Node, error) {
+func (q *Queries) GetNodesByParentID(ctx context.Context, ownerID int64, parentID *string, limit int, offset int) ([]models.Node, error) {
 	var query string
 	var rows pgx.Rows
 	var err error
@@ -473,14 +473,16 @@ func (q *Queries) GetNodesByParentID(ctx context.Context, ownerID int64, parentI
 		query = `SELECT id, name, node_type, size_bytes, mime_type, created_at, modified_at 
 				 FROM nodes 
 				 WHERE owner_id = $1 AND parent_id IS NULL AND deleted_at IS NULL
-				 ORDER BY node_type DESC, name`
-		rows, err = q.db.Query(ctx, query, ownerID)
+				 ORDER BY node_type DESC, name
+				 LIMIT $2 OFFSET $3`
+		rows, err = q.db.Query(ctx, query, ownerID, limit, offset)
 	} else {
 		query = `SELECT id, name, node_type, size_bytes, mime_type, created_at, modified_at 
 				 FROM nodes 
 				 WHERE owner_id = $1 AND parent_id = $2 AND deleted_at IS NULL
-				 ORDER BY node_type DESC, name`
-		rows, err = q.db.Query(ctx, query, ownerID, *parentID)
+				 ORDER BY node_type DESC, name
+				 LIMIT $3 OFFSET $4`
+		rows, err = q.db.Query(ctx, query, ownerID, *parentID, limit, offset)
 	}
 
 	if err != nil {
@@ -587,32 +589,47 @@ func (q *Queries) MoveNodeToTrash(ctx context.Context, id string, ownerID int64)
 	return res.RowsAffected() > 0, nil
 }
 
-func (q *Queries) PurgeTrash(ctx context.Context, ownerID int64) ([]string, error) {
+func (q *Queries) UpdateUserStorage(ctx context.Context, userID int64, bytesChange int64) error {
 	query := `
-		DELETE FROM nodes
-		WHERE owner_id = $1 AND deleted_at IS NOT NULL
-		RETURNING id, node_type
+		UPDATE users
+		SET storage_used_bytes = storage_used_bytes + $1
+		WHERE id = $2
+	`
+	_, err := q.db.Exec(ctx, query, bytesChange, userID)
+	return err
+}
+
+func (q *Queries) PurgeTrash(ctx context.Context, ownerID int64) ([]string, int64, error) {
+	query := `
+		WITH deleted_nodes AS (
+			DELETE FROM nodes
+			WHERE owner_id = $1 AND deleted_at IS NOT NULL
+			RETURNING id, node_type, size_bytes
+		)
+		SELECT 
+			id, 
+			COALESCE((SELECT sum(size_bytes) FROM deleted_nodes WHERE node_type = 'file'), 0)
+		FROM deleted_nodes
+		WHERE node_type = 'file'
 	`
 
 	rows, err := q.db.Query(ctx, query, ownerID)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
 	var deletedFileIDs []string
+	var totalSizeFreed int64 = 0
 	for rows.Next() {
 		var id string
-		var nodeType string
-		if err := rows.Scan(&id, &nodeType); err != nil {
-			return nil, err
+		if err := rows.Scan(&id, &totalSizeFreed); err != nil {
+			return nil, 0, err
 		}
-		if nodeType == "file" {
-			deletedFileIDs = append(deletedFileIDs, id)
-		}
+		deletedFileIDs = append(deletedFileIDs, id)
 	}
 
-	return deletedFileIDs, nil
+	return deletedFileIDs, totalSizeFreed, nil
 }
 
 func (q *Queries) RenameNode(ctx context.Context, id string, ownerID int64, newName string) (bool, error) {
@@ -656,14 +673,14 @@ func (q *Queries) MoveNode(ctx context.Context, id string, ownerID int64, newPar
 	return res.RowsAffected() > 0, nil
 }
 
-func (q *Queries) ListTrash(ctx context.Context, ownerID int64) ([]models.Node, error) {
+func (q *Queries) ListTrash(ctx context.Context, ownerID int64, limit int, offset int) ([]models.Node, error) {
 	query := `
 		SELECT id, name, node_type, size_bytes, mime_type, created_at, modified_at, deleted_at
 		FROM nodes
 		WHERE owner_id = $1 AND deleted_at IS NOT NULL
-		ORDER BY deleted_at DESC
+		ORDER BY deleted_at DESC LIMIT $2 OFFSET $3
 	`
-	rows, err := q.db.Query(ctx, query, ownerID)
+	rows, err := q.db.Query(ctx, query, ownerID, limit, offset)
 	if err != nil {
 		return nil, err
 	}

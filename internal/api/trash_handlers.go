@@ -11,7 +11,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// PurgeTrashHandler permanently deletes all items from the trash.
 // @Summary      Purge trash
 // @Description  Permanently deletes all files and folders from the user's trash. This action cannot be undone.
 // @Tags         trash
@@ -23,9 +22,25 @@ import (
 func (s *Server) PurgeTrashHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 
-	deletedFileIDs, err := s.store.PurgeTrash(r.Context(), claims.UserID)
-	if err != nil {
-		http.Error(w, "Failed to purge trash from database", http.StatusInternalServerError)
+	var deletedFileIDs []string
+	var totalSizeFreed int64
+
+	txErr := s.store.ExecTx(r.Context(), func(q *database.Queries) error {
+		var err error
+		deletedFileIDs, totalSizeFreed, err = q.PurgeTrash(r.Context(), claims.UserID)
+		if err != nil {
+			return err
+		}
+
+		if totalSizeFreed > 0 {
+			return q.UpdateUserStorage(r.Context(), claims.UserID, -totalSizeFreed)
+		}
+
+		return nil
+	})
+
+	if txErr != nil {
+		http.Error(w, "Failed to purge trash", http.StatusInternalServerError)
 		return
 	}
 
@@ -38,7 +53,6 @@ func (s *Server) PurgeTrashHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// RestoreNodeHandler restores a file or folder from the trash.
 // @Summary      Restore a node from trash
 // @Description  Restores a file or folder from the trash to its original location. Fails if a node with the same name already exists in the target location.
 // @Tags         nodes
@@ -52,8 +66,9 @@ func (s *Server) PurgeTrashHandler(w http.ResponseWriter, r *http.Request) {
 // @Router       /nodes/{nodeId}/restore [post]
 func (s *Server) ListTrashHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
+	limit, offset := parsePagination(r)
 
-	nodes, err := s.store.ListTrash(r.Context(), claims.UserID)
+	nodes, err := s.store.ListTrash(r.Context(), claims.UserID, limit, offset)
 	if err != nil {
 		http.Error(w, "Failed to list trash contents", http.StatusInternalServerError)
 		return
@@ -63,7 +78,6 @@ func (s *Server) ListTrashHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(nodes)
 }
 
-// ListTrashHandler lists all items currently in the user's trash.
 // @Summary      List trash contents
 // @Description  Retrieves a list of all files and folders currently in the user's trash.
 // @Tags         trash
