@@ -1,0 +1,9 @@
+Connect SSH
+	docker exec -it fileserver_app sh
+
+Connect DB
+	docker exec -it fileserver_db psql -U fileserver -d fileserver_db
+
+Docker-compose reset
+	docker-compose down -v
+	docker-compose up --build
