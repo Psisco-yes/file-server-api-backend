@@ -2,9 +2,11 @@ package api
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 
-	_ "serwer-plikow/internal/auth"
+	"serwer-plikow/internal/auth"
+	"serwer-plikow/internal/database"
 )
 
 // @Summary      Get current user info
@@ -62,4 +64,73 @@ func (s *Server) GetStorageUsageHandler(w http.ResponseWriter, r *http.Request) 
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+type ChangePasswordRequest struct {
+	OldPassword string `json:"old_password" example:"password123"`
+	NewPassword string `json:"new_password" example:"newStrongPassword456"`
+}
+
+// @Summary      Change current user's password
+// @Description  Allows the authenticated user to change their own password. The new password must be at least 8 characters long. Upon successful password change, all other active sessions for the user will be terminated for security reasons.
+// @Tags         users
+// @Accept       json
+// @Security     BearerAuth
+// @Param        changePasswordRequest  body      ChangePasswordRequest  true  "Old and new password"
+// @Success      204                    {null}    nil                    "No Content - Password changed successfully"
+// @Failure      400                    {string}  string "Bad Request - New password is weak (less than 8 characters) or empty"
+// @Failure      401                    {string}  string "Unauthorized - Old password does not match"
+// @Failure      500                    {string}  string "Internal Server Error"
+// @Router       /me/password [patch]
+func (s *Server) ChangePasswordHandler(w http.ResponseWriter, r *http.Request) {
+	claims := GetUserFromContext(r.Context())
+
+	var req ChangePasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if len(req.NewPassword) < 8 {
+		http.Error(w, "New password must be at least 8 characters long", http.StatusBadRequest)
+		return
+	}
+
+	user, err := s.store.GetUserByUsername(r.Context(), claims.Username)
+	if err != nil || user == nil {
+		http.Error(w, "Could not find user", http.StatusInternalServerError)
+		return
+	}
+
+	if !auth.CheckPasswordHash(req.OldPassword, user.PasswordHash) {
+		http.Error(w, "Old password does not match", http.StatusUnauthorized)
+		return
+	}
+
+	newPasswordHash, err := auth.HashPassword(req.NewPassword)
+	if err != nil {
+		http.Error(w, "Failed to hash new password", http.StatusInternalServerError)
+		return
+	}
+
+	err = s.store.UpdateUserPassword(r.Context(), claims.UserID, newPasswordHash)
+	if err != nil {
+		http.Error(w, "Failed to update password", http.StatusInternalServerError)
+		return
+	}
+
+	txErr := s.store.ExecTx(r.Context(), func(q *database.Queries) error {
+		if err := q.UpdateUserPassword(r.Context(), claims.UserID, newPasswordHash); err != nil {
+			return err
+		}
+		return q.DeleteAllSessionsForUser(r.Context(), claims.UserID)
+	})
+
+	if txErr != nil {
+		log.Printf("ERROR: Failed to update password and terminate sessions in transaction: %v", txErr)
+		http.Error(w, "Failed to update password", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

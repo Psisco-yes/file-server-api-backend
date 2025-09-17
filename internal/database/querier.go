@@ -933,3 +933,9 @@ func (q *Queries) DeleteSessionByRefreshToken(ctx context.Context, refreshToken 
 	_, err := q.db.Exec(ctx, query, refreshToken)
 	return err
 }
+
+func (q *Queries) UpdateUserPassword(ctx context.Context, userID int64, newPasswordHash string) error {
+	query := `UPDATE users SET password_hash = $1 WHERE id = $2`
+	_, err := q.db.Exec(ctx, query, newPasswordHash, userID)
+	return err
+}
