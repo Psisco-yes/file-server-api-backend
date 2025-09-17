@@ -8,6 +8,7 @@ import (
 	"serwer-plikow/internal/models"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -833,4 +834,102 @@ func (q *Queries) IsDescendantOf(ctx context.Context, nodeId string, potentialPa
 	var isDescendant bool
 	err := q.db.QueryRow(ctx, query, nodeId, potentialParentId).Scan(&isDescendant)
 	return isDescendant, err
+}
+
+type CreateSessionParams struct {
+	ID           uuid.UUID
+	UserID       int64
+	RefreshToken string
+	UserAgent    string
+	ClientIP     string
+	ExpiresAt    time.Time
+}
+
+func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) error {
+	query := `
+		INSERT INTO sessions (id, user_id, refresh_token, user_agent, client_ip, expires_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`
+	_, err := q.db.Exec(ctx, query, arg.ID, arg.UserID, arg.RefreshToken, arg.UserAgent, arg.ClientIP, arg.ExpiresAt)
+	return err
+}
+
+func (q *Queries) GetUserByRefreshToken(ctx context.Context, refreshToken string) (*models.User, error) {
+	query := `
+		SELECT 
+			u.id, u.username, u.password_hash, u.display_name, u.created_at, 
+			u.storage_quota_bytes, u.storage_used_bytes
+		FROM users u
+		JOIN sessions s ON u.id = s.user_id
+		WHERE s.refresh_token = $1 AND s.expires_at > NOW()
+	`
+	var user models.User
+	err := q.db.QueryRow(ctx, query, refreshToken).Scan(
+		&user.ID, &user.Username, &user.PasswordHash, &user.DisplayName, &user.CreatedAt,
+		&user.StorageQuotaBytes, &user.StorageUsedBytes,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (q *Queries) ListSessionsForUser(ctx context.Context, userID int64) ([]models.Session, error) {
+	query := `
+		SELECT id, user_agent, client_ip, expires_at, created_at
+		FROM sessions
+		WHERE user_id = $1 AND expires_at > NOW()
+		ORDER BY created_at DESC
+	`
+	rows, err := q.db.Query(ctx, query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sessions []models.Session
+	for rows.Next() {
+		var session models.Session
+		if err := rows.Scan(
+			&session.ID,
+			&session.UserAgent,
+			&session.ClientIP,
+			&session.ExpiresAt,
+			&session.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		sessions = append(sessions, session)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if sessions == nil {
+		return []models.Session{}, nil
+	}
+
+	return sessions, nil
+}
+
+func (q *Queries) DeleteSessionByID(ctx context.Context, sessionID uuid.UUID, userID int64) error {
+	query := `DELETE FROM sessions WHERE id = $1 AND user_id = $2`
+	_, err := q.db.Exec(ctx, query, sessionID, userID)
+	return err
+}
+
+func (q *Queries) DeleteAllSessionsForUser(ctx context.Context, userID int64) error {
+	query := `DELETE FROM sessions WHERE user_id = $1`
+	_, err := q.db.Exec(ctx, query, userID)
+	return err
+}
+
+func (q *Queries) DeleteSessionByRefreshToken(ctx context.Context, refreshToken string) error {
+	query := `DELETE FROM sessions WHERE refresh_token = $1`
+	_, err := q.db.Exec(ctx, query, refreshToken)
+	return err
 }

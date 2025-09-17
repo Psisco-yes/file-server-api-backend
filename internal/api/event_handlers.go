@@ -11,7 +11,7 @@ type EventResponse struct {
 	ID        int64           `json:"id" example:"123"`
 	EventType string          `json:"event_type" example:"node_created"`
 	EventTime time.Time       `json:"event_time"`
-	Payload   json.RawMessage `json:"payload"`
+	Payload   json.RawMessage `json:"payload" swaggertype:"object"`
 }
 
 // @Summary      Get new events

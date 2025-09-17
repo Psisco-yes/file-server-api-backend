@@ -47,7 +47,7 @@ func TestGenerateAndVerifyJWT(t *testing.T) {
 	require.NotNil(t, claims)
 	require.Equal(t, user.ID, claims.UserID)
 	require.Equal(t, user.Username, claims.Username)
-	require.WithinDuration(t, time.Now().Add(24*time.Hour), claims.ExpiresAt.Time, 5*time.Second)
+	require.WithinDuration(t, time.Now().Add(1*time.Hour), claims.ExpiresAt.Time, 5*time.Second)
 
 	_, err = VerifyJWT(tokenString, "wrong_secret")
 	require.Error(t, err)

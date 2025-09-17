@@ -21,18 +21,18 @@ import (
 )
 
 type CreateFolderRequest struct {
-	Name     string  `json:"name"`
-	ParentID *string `json:"parent_id"`
+	Name     string  `json:"name" example:"Nowy Folder"`
+	ParentID *string `json:"parent_id,omitempty" example:"_vx2a-43VqRT5wz_s9u4"`
 }
 
 type NodeResponse struct {
 	ID         string    `json:"id" example:"_vx2a-43VqRT5wz_s9u4"`
 	OwnerID    int64     `json:"owner_id" example:"1"`
 	ParentID   *string   `json:"parent_id,omitempty" example:"fLW5kAh2ia9vYmjMnU4nZ"`
-	Name       string    `json:"name" example:"Raport.docx"`
+	Name       string    `json:"name" example:"Raport_Q3.docx"`
 	NodeType   string    `json:"node_type" example:"file"`
-	SizeBytes  *int64    `json:"size_bytes,omitempty" example:"1024"`
-	MimeType   *string   `json:"mime_type,omitempty" example:"application/pdf"`
+	SizeBytes  *int64    `json:"size_bytes,omitempty" example:"123456"`
+	MimeType   *string   `json:"mime_type,omitempty" example:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"`
 	CreatedAt  time.Time `json:"created_at"`
 	ModifiedAt time.Time `json:"modified_at"`
 }
@@ -420,8 +420,8 @@ func (s *Server) DeleteNodeHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 type UpdateNodeRequest struct {
-	Name     *string `json:"name"`
-	ParentID *string `json:"parent_id"`
+	Name     *string `json:"name,omitempty" example:"Nowa Nazwa Pliku"`
+	ParentID *string `json:"parent_id,omitempty" example:"bNowyFolderRodzic123"`
 }
 
 // @Summary      Update a node

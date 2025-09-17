@@ -14,30 +14,28 @@ import (
 )
 
 type ShareRequest struct {
-	RecipientUsername string `json:"recipient_username"`
-	Permissions       string `json:"permissions"`
+	RecipientUsername string `json:"recipient_username" example:"user2"`
+	Permissions       string `json:"permissions" example:"read" enums:"read,write"`
 }
 
 type SharingUserResponse struct {
 	ID          int64  `json:"id" example:"2"`
 	Username    string `json:"username" example:"user2"`
-	DisplayName string `json:"display_name" example:"Test User"`
+	DisplayName string `json:"display_name" example:"Jan Kowalski"`
 }
 
 type OutgoingShareResponse struct {
-	ID                int64     `json:"id"`
-	NodeID            string    `json:"node_id"`
-	SharerID          int64     `json:"sharer_id"`
-	RecipientID       int64     `json:"recipient_id"`
-	Permissions       string    `json:"permissions"`
-	SharedAt          time.Time `json:"shared_at"`
-	NodeName          string    `json:"node_name" example:"Raport.docx"`
-	NodeType          string    `json:"node_type" example:"file"`
+	ID                int64     `json:"id" example:"42"`
+	NodeID            string    `json:"node_id" example:"_vx2a-43VqRT5wz_s9u4"`
+	NodeName          string    `json:"node_name" example:"Wspólny Projekt"`
+	NodeType          string    `json:"node_type" example:"folder"`
 	RecipientUsername string    `json:"recipient_username" example:"user2"`
+	Permissions       string    `json:"permissions" example:"write"`
+	SharedAt          time.Time `json:"shared_at"`
 }
 
 type ShareResponse struct {
-	ID          int64     `json:"id" example:"1"`
+	ID          int64     `json:"id" example:"42"`
 	NodeID      string    `json:"node_id" example:"_vx2a-43VqRT5wz_s9u4"`
 	SharerID    int64     `json:"sharer_id" example:"1"`
 	RecipientID int64     `json:"recipient_id" example:"2"`

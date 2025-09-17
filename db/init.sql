@@ -8,6 +8,18 @@ CREATE TABLE users (
     storage_used_bytes BIGINT NOT NULL DEFAULT 0
 );
 
+CREATE TABLE sessions (
+    id UUID PRIMARY KEY, 
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    refresh_token TEXT UNIQUE NOT NULL,
+    user_agent TEXT,
+    client_ip TEXT,
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_sessions_user_id ON sessions(user_id);
+
 CREATE TABLE nodes (
     id VARCHAR(21) PRIMARY KEY,
     owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

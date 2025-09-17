@@ -84,9 +84,16 @@ func main() {
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Post("/auth/login", server.LoginHandler)
+		r.Post("/auth/refresh", server.RefreshTokenHandler)
 
 		r.Group(func(r chi.Router) {
 			r.Use(server.AuthMiddleware)
+
+			r.Route("/sessions", func(r chi.Router) {
+				r.Get("/", server.ListSessionsHandler)
+				r.Post("/terminate_all", server.TerminateAllSessionsHandler)
+				r.Delete("/{sessionId}", server.DeleteSessionHandler)
+			})
 
 			r.Route("/me", func(r chi.Router) {
 				r.Get("/", server.GetCurrentUserHandler)
