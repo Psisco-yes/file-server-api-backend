@@ -310,7 +310,6 @@ func (q *Queries) ListDirectlySharedNodes(ctx context.Context, recipientID int64
 func (q *Queries) HasAccessToNode(ctx context.Context, nodeID string, recipientID int64) (bool, error) {
 	query := `
 		WITH RECURSIVE node_parents AS (
-			-- Zaczynamy od node'a, o który pytamy
 			SELECT id, parent_id
 			FROM nodes
 			WHERE id = $1
@@ -814,17 +813,14 @@ func (q *Queries) IsDescendantOf(ctx context.Context, nodeId string, potentialPa
 
 	query := `
 		WITH RECURSIVE node_children AS (
-			-- Zaczynamy od node'a, który chcemy przenieść (i jego dzieci)
 			SELECT id FROM nodes WHERE id = $1
 
 			UNION ALL
 
-			-- Rekurencyjnie idziemy w dół drzewa
 			SELECT n.id
 			FROM nodes n
 			JOIN node_children nc ON n.parent_id = nc.id
 		)
-		-- Sprawdzamy, czy proponowany nowy rodzic jest jednym z dzieci.
 		SELECT EXISTS (
 			SELECT 1
 			FROM node_children
@@ -938,4 +934,58 @@ func (q *Queries) UpdateUserPassword(ctx context.Context, userID int64, newPassw
 	query := `UPDATE users SET password_hash = $1 WHERE id = $2`
 	_, err := q.db.Exec(ctx, query, newPasswordHash, userID)
 	return err
+}
+
+func (q *Queries) CheckWritePermission(ctx context.Context, userID int64, parentID *string) (bool, error) {
+	if parentID == nil {
+		return true, nil
+	}
+
+	query := `
+		WITH RECURSIVE node_parents AS (
+			SELECT id, parent_id, owner_id
+			FROM nodes
+			WHERE id = $1
+
+			UNION ALL
+
+			SELECT n.id, n.parent_id, n.owner_id
+			FROM nodes n
+			JOIN node_parents np ON n.id = np.parent_id
+		)
+		SELECT EXISTS (
+			SELECT 1 FROM node_parents WHERE owner_id = $2
+			LIMIT 1
+		) OR EXISTS (
+			SELECT 1
+			FROM shares s
+			WHERE s.recipient_id = $2 AND s.permissions = 'write' AND s.node_id IN (SELECT id FROM node_parents)
+			LIMIT 1
+		)
+	`
+	var hasPermission bool
+	err := q.db.QueryRow(ctx, query, *parentID, userID).Scan(&hasPermission)
+	return hasPermission, err
+}
+
+func (q *Queries) GetUserByID(ctx context.Context, id int64) (*models.User, error) {
+	query := `
+		SELECT 
+			id, username, password_hash, display_name, created_at, 
+			storage_quota_bytes, storage_used_bytes
+		FROM users
+		WHERE id = $1
+	`
+	var user models.User
+	err := q.db.QueryRow(ctx, query, id).Scan(
+		&user.ID, &user.Username, &user.PasswordHash, &user.DisplayName, &user.CreatedAt,
+		&user.StorageQuotaBytes, &user.StorageUsedBytes,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &user, nil
 }

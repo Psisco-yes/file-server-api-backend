@@ -114,11 +114,16 @@ func (s *Server) ShareNodeHandler(w http.ResponseWriter, r *http.Request) {
 			return txErr
 		}
 
-		payload := map[string]interface{}{
-			"share_info": createdShare,
-			"node_info":  node,
+		payloadForRecipient := map[string]interface{}{"share_info": createdShare, "node_info": node}
+		txErr = q.LogEvent(r.Context(), recipient.ID, "node_shared_with_you", payloadForRecipient)
+		if txErr != nil {
+			return txErr
 		}
-		return q.LogEvent(r.Context(), recipient.ID, "node_shared_with_you", payload)
+
+		payloadForSharer := map[string]interface{}{"share_info": createdShare, "node_info": node, "recipient_username": recipient.Username}
+		txErr = q.LogEvent(r.Context(), claims.UserID, "node_share_created", payloadForSharer)
+
+		return txErr
 	})
 
 	if txErr != nil {
@@ -134,13 +139,15 @@ func (s *Server) ShareNodeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	payload := map[string]interface{}{
-		"share_info": createdShare,
-		"node_info":  node,
-	}
-	eventMsg := map[string]interface{}{"event_type": "node_shared_with_you", "payload": payload}
-	eventBytes, _ := json.Marshal(eventMsg)
-	s.wsHub.PublishEvent(recipient.ID, eventBytes)
+	payloadForRecipient := map[string]interface{}{"share_info": createdShare, "node_info": node}
+	eventMsgRecipient := map[string]interface{}{"event_type": "node_shared_with_you", "payload": payloadForRecipient}
+	eventBytesRecipient, _ := json.Marshal(eventMsgRecipient)
+	s.wsHub.PublishEvent(recipient.ID, eventBytesRecipient)
+
+	payloadForSharer := map[string]interface{}{"share_info": createdShare, "node_info": node, "recipient_username": recipient.Username}
+	eventMsgSharer := map[string]interface{}{"event_type": "node_share_created", "payload": payloadForSharer}
+	eventBytesSharer, _ := json.Marshal(eventMsgSharer)
+	s.wsHub.PublishEvent(claims.UserID, eventBytesSharer)
 
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(createdShare)
@@ -302,8 +309,16 @@ func (s *Server) DeleteShareHandler(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 
-		payload := map[string]string{"node_id": shareInfo.NodeID}
-		return q.LogEvent(r.Context(), shareInfo.RecipientID, "share_revoked_for_you", payload)
+		payloadForRecipient := map[string]string{"node_id": shareInfo.NodeID}
+		err = q.LogEvent(r.Context(), shareInfo.RecipientID, "share_revoked_for_you", payloadForRecipient)
+		if err != nil {
+			return err
+		}
+
+		payloadForSharer := map[string]interface{}{"share_id": shareInfo.ID, "node_id": shareInfo.NodeID}
+		err = q.LogEvent(r.Context(), claims.UserID, "node_share_revoked", payloadForSharer)
+
+		return err
 	})
 
 	if txErr != nil {
@@ -312,10 +327,15 @@ func (s *Server) DeleteShareHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	payload := map[string]string{"node_id": shareInfo.NodeID}
-	eventMsg := map[string]interface{}{"event_type": "share_revoked_for_you", "payload": payload}
-	eventBytes, _ := json.Marshal(eventMsg)
-	s.wsHub.PublishEvent(shareInfo.RecipientID, eventBytes)
+	payloadForRecipient := map[string]string{"node_id": shareInfo.NodeID}
+	eventMsgRecipient := map[string]interface{}{"event_type": "share_revoked_for_you", "payload": payloadForRecipient}
+	eventBytesRecipient, _ := json.Marshal(eventMsgRecipient)
+	s.wsHub.PublishEvent(shareInfo.RecipientID, eventBytesRecipient)
+
+	payloadForSharer := map[string]interface{}{"share_id": shareInfo.ID, "node_id": shareInfo.NodeID}
+	eventMsgSharer := map[string]interface{}{"event_type": "node_share_revoked", "payload": payloadForSharer}
+	eventBytesSharer, _ := json.Marshal(eventMsgSharer)
+	s.wsHub.PublishEvent(claims.UserID, eventBytesSharer)
 
 	w.WriteHeader(http.StatusNoContent)
 }

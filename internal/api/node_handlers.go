@@ -60,7 +60,7 @@ func (s *Server) generateUniqueID(ctx context.Context) (string, error) {
 }
 
 // @Summary      Create a new folder
-// @Description  Creates a new folder in a specified parent folder or in the root directory if parent_id is omitted.
+// @Description  Creates a new folder. If created inside a shared folder with write permissions, the folder's owner becomes the owner of the new folder. Otherwise, the creator is the owner.
 // @Tags         nodes
 // @Accept       json
 // @Produce      json
@@ -69,7 +69,9 @@ func (s *Server) generateUniqueID(ctx context.Context) (string, error) {
 // @Success      201            {object}  NodeResponse
 // @Failure      400            {string}  string "Bad Request"
 // @Failure      401            {string}  string "Unauthorized"
-// @Failure      409            {string}  string "Conflict - folder with this name already exists"
+// @Failure      403            {string}  string "Forbidden - Write permission denied"
+// @Failure      404            {string}  string "Not Found - Parent folder not found"
+// @Failure      409            {string}  string "Conflict - a folder with the same name already exists"
 // @Failure      500            {string}  string "Internal Server Error"
 // @Router       /nodes/folder [post]
 func (s *Server) CreateFolderHandler(w http.ResponseWriter, r *http.Request) {
@@ -91,40 +93,68 @@ func (s *Server) CreateFolderHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	nodeID, err := s.generateUniqueID(r.Context())
+	hasPermission, err := s.store.CheckWritePermission(r.Context(), claims.UserID, req.ParentID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Failed to verify permissions", http.StatusInternalServerError)
+		return
+	}
+	if !hasPermission {
+		http.Error(w, "You do not have permission to create items in this folder", http.StatusForbidden)
 		return
 	}
 
-	params := database.CreateNodeParams{
-		ID:       nodeID,
-		OwnerID:  claims.UserID,
-		ParentID: req.ParentID,
-		Name:     req.Name,
-		NodeType: "folder",
+	var ownerID int64 = claims.UserID
+	var parentFolderOwnerID *int64
+	if req.ParentID != nil {
+		parentFolder, err := s.store.GetNodeIfAccessible(r.Context(), *req.ParentID, claims.UserID)
+		if err != nil || parentFolder == nil {
+			http.Error(w, "Parent folder not found or access denied", http.StatusNotFound)
+			return
+		}
+		ownerID = parentFolder.OwnerID
+		parentFolderOwnerID = &parentFolder.OwnerID
 	}
 
 	var createdNode *models.Node
 
 	txErr := s.store.ExecTx(r.Context(), func(q *database.Queries) error {
-		var txErr error
-		createdNode, txErr = q.CreateNode(r.Context(), params)
-		if txErr != nil {
-			return txErr
+		nodeID, err := s.generateUniqueID(r.Context())
+		if err != nil {
+			return err
 		}
 
-		return q.LogEvent(r.Context(), claims.UserID, "node_created", createdNode)
+		params := database.CreateNodeParams{
+			ID:       nodeID,
+			OwnerID:  ownerID,
+			ParentID: req.ParentID,
+			Name:     req.Name,
+			NodeType: "folder",
+		}
+
+		createdNode, err = q.CreateNode(r.Context(), params)
+		if err != nil {
+			return err
+		}
+
+		err = q.LogEvent(r.Context(), claims.UserID, "node_created", createdNode)
+		if err != nil {
+			return err
+		}
+
+		if parentFolderOwnerID != nil && claims.UserID != *parentFolderOwnerID {
+			err = q.LogEvent(r.Context(), *parentFolderOwnerID, "node_created", createdNode)
+		}
+		return err
 	})
 
 	if txErr != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(txErr, &pgErr) {
 			switch pgErr.Code {
-			case "23503": // foreign_key_violation
+			case "23503":
 				http.Error(w, "Parent folder does not exist", http.StatusBadRequest)
 				return
-			case "23505": // unique_violation
+			case "23505":
 				http.Error(w, "A folder with the same name already exists in this location", http.StatusConflict)
 				return
 			}
@@ -143,6 +173,9 @@ func (s *Server) CreateFolderHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("CRITICAL: Failed to marshal WebSocket event for node %s: %v", createdNode.ID, err)
 	} else {
 		s.wsHub.PublishEvent(claims.UserID, eventBytes)
+		if parentFolderOwnerID != nil && claims.UserID != *parentFolderOwnerID {
+			s.wsHub.PublishEvent(*parentFolderOwnerID, eventBytes)
+		}
 	}
 
 	w.WriteHeader(http.StatusCreated)
@@ -184,7 +217,7 @@ func (s *Server) ListNodesHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary      Upload file(s)
-// @Description  Uploads one or more files to a specified parent folder or the root directory. Use multipart/form-data. The total size of the request payload cannot exceed 1GB. Exceeding the user's storage quota will also result in an error.
+// @Description  Uploads one or more files. If uploaded inside a shared folder with write permissions, the folder's owner becomes the owner of the new file(s). The total size of the request payload cannot exceed 1GB. Exceeding the owner's storage quota will result in an error.
 // @Tags         nodes
 // @Accept       multipart/form-data
 // @Produce      json
@@ -194,7 +227,9 @@ func (s *Server) ListNodesHandler(w http.ResponseWriter, r *http.Request) {
 // @Success      201        {array}   NodeResponse
 // @Failure      400        {string}  string "Bad Request"
 // @Failure      401        {string}  string "Unauthorized"
-// @Failure      413        {string}  string "Payload Too Large - either the request exceeds 1GB or the user's storage quota is exceeded."
+// @Failure      403        {string}  string "Forbidden - Write permission denied"
+// @Failure      404        {string}  string "Not Found - Parent folder not found"
+// @Failure      413        {string}  string "Payload Too Large - either the request exceeds 1GB or the owner's storage quota is exceeded."
 // @Failure      500        {string}  string "Internal Server Error"
 // @Router       /nodes/file [post]
 func (s *Server) UploadFileHandler(w http.ResponseWriter, r *http.Request) {
@@ -202,7 +237,7 @@ func (s *Server) UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<30) // TODO: zaimplementować chunked upload!!!
 
-	if err := r.ParseMultipartForm(32 << 20); err != nil { // 32MB w pamięci
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		http.Error(w, "Error parsing multipart form: "+err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -217,16 +252,37 @@ func (s *Server) UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 		parentID = &parentIDStr
 	}
 
+	hasPermission, err := s.store.CheckWritePermission(r.Context(), claims.UserID, parentID)
+	if err != nil {
+		http.Error(w, "Failed to verify permissions", http.StatusInternalServerError)
+		return
+	}
+	if !hasPermission {
+		http.Error(w, "You do not have permission to create items in this folder", http.StatusForbidden)
+		return
+	}
+
+	var ownerID int64 = claims.UserID
+	var parentFolderOwnerID *int64
+	if parentID != nil {
+		parentFolder, err := s.store.GetNodeIfAccessible(r.Context(), *parentID, claims.UserID)
+		if err != nil || parentFolder == nil {
+			http.Error(w, "Parent folder not found or access denied", http.StatusNotFound)
+			return
+		}
+		ownerID = parentFolder.OwnerID
+		parentFolderOwnerID = &parentFolder.OwnerID
+	}
+
 	files := r.MultipartForm.File["file"]
 	if len(files) == 0 {
 		http.Error(w, "No files uploaded", http.StatusBadRequest)
 		return
 	}
 
-	currentUser, err := s.store.GetUserByUsername(r.Context(), claims.Username)
-	if err != nil || currentUser == nil {
-		log.Printf("ERROR: Could not retrieve current user data for quota check: %v", err)
-		http.Error(w, "Could not verify user for upload", http.StatusInternalServerError)
+	ownerUser, err := s.store.GetUserByID(r.Context(), ownerID)
+	if err != nil || ownerUser == nil {
+		http.Error(w, "Could not verify owner for quota check", http.StatusInternalServerError)
 		return
 	}
 
@@ -235,8 +291,8 @@ func (s *Server) UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 		totalUploadSize += handler.Size
 	}
 
-	if currentUser.StorageUsedBytes+totalUploadSize > currentUser.StorageQuotaBytes {
-		http.Error(w, "Storage quota exceeded", http.StatusRequestEntityTooLarge)
+	if ownerUser.StorageUsedBytes+totalUploadSize > ownerUser.StorageQuotaBytes {
+		http.Error(w, "Storage quota for the owner of this folder is exceeded", http.StatusRequestEntityTooLarge)
 		return
 	}
 
@@ -250,57 +306,71 @@ func (s *Server) UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		defer file.Close()
 
-		nodeID, err := s.generateUniqueID(r.Context())
-		if err != nil {
-			log.Printf("ERROR generating unique ID for file %s: %v", handler.Filename, err)
-			continue
-		}
-
-		if err := s.storage.Save(nodeID, file); err != nil {
-			log.Printf("ERROR saving file %s to storage: %v", handler.Filename, err)
-			continue
-		}
-
-		sizeBytes := handler.Size
-		mimeType := handler.Header.Get("Content-Type")
-		params := database.CreateNodeParams{
-			ID:        nodeID,
-			OwnerID:   claims.UserID,
-			ParentID:  parentID,
-			Name:      handler.Filename,
-			NodeType:  "file",
-			SizeBytes: &sizeBytes,
-			MimeType:  &mimeType,
-		}
-
 		var createdNode *models.Node
+		nodeID := ""
 
 		txErr := s.store.ExecTx(r.Context(), func(q *database.Queries) error {
 			var txErr error
+			nodeID, txErr = s.generateUniqueID(r.Context())
+			if txErr != nil {
+				return txErr
+			}
+
+			file.Seek(0, io.SeekStart)
+			if err := s.storage.Save(nodeID, file); err != nil {
+				return fmt.Errorf("failed to save file to storage: %w", err)
+			}
+
+			sizeBytes := handler.Size
+			mimeType := handler.Header.Get("Content-Type")
+			params := database.CreateNodeParams{
+				ID:        nodeID,
+				OwnerID:   ownerID,
+				ParentID:  parentID,
+				Name:      handler.Filename,
+				NodeType:  "file",
+				SizeBytes: &sizeBytes,
+				MimeType:  &mimeType,
+			}
+
 			createdNode, txErr = q.CreateNode(r.Context(), params)
 			if txErr != nil {
 				return txErr
 			}
 
-			txErr = q.UpdateUserStorage(r.Context(), claims.UserID, sizeBytes)
+			txErr = q.UpdateUserStorage(r.Context(), ownerID, sizeBytes)
 			if txErr != nil {
 				return txErr
 			}
 
-			return q.LogEvent(r.Context(), claims.UserID, "node_created", createdNode)
+			err = q.LogEvent(r.Context(), claims.UserID, "node_created", createdNode)
+			if err != nil {
+				return err
+			}
+
+			if parentFolderOwnerID != nil && claims.UserID != *parentFolderOwnerID {
+				err = q.LogEvent(r.Context(), *parentFolderOwnerID, "node_created", createdNode)
+			}
+			return err
 		})
 
 		if txErr != nil {
 			log.Printf("ERROR creating db record for file %s: %v", handler.Filename, txErr)
-			if cleanupErr := s.storage.Delete(nodeID); cleanupErr != nil {
-				log.Printf("CRITICAL: Failed to clean up orphaned file %s: %v", nodeID, cleanupErr)
+			if nodeID != "" {
+				if cleanupErr := s.storage.Delete(nodeID); cleanupErr != nil {
+					log.Printf("CRITICAL: Failed to clean up orphaned file %s: %v", nodeID, cleanupErr)
+				}
 			}
 			continue
 		}
 
 		eventMsg := map[string]interface{}{"event_type": "node_created", "payload": createdNode}
 		eventBytes, _ := json.Marshal(eventMsg)
+
 		s.wsHub.PublishEvent(claims.UserID, eventBytes)
+		if parentFolderOwnerID != nil && claims.UserID != *parentFolderOwnerID {
+			s.wsHub.PublishEvent(*parentFolderOwnerID, eventBytes)
+		}
 
 		createdNodes = append(createdNodes, *createdNode)
 	}
@@ -371,12 +441,13 @@ func (s *Server) DownloadFileHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary      Move node to trash
-// @Description  Moves a file or a folder (and its contents) to the trash (soft delete).
+// @Description  Moves a file or a folder (and its contents) to the trash (soft delete). Requires write permission in the folder containing the node. The node is moved to its owner's trash.
 // @Tags         nodes
 // @Security     BearerAuth
 // @Param        nodeId   path      string  true  "Node ID to move to trash"
 // @Success      204      {null}    nil     "No Content"
 // @Failure      401      {string}  string "Unauthorized"
+// @Failure      403      {string}  string "Forbidden - Write permission denied"
 // @Failure      404      {string}  string "Not Found"
 // @Failure      500      {string}  string "Internal Server Error"
 // @Router       /nodes/{nodeId} [delete]
@@ -389,8 +460,28 @@ func (s *Server) DeleteNodeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	nodeToDelete, err := s.store.GetNodeIfAccessible(r.Context(), nodeID, claims.UserID)
+	if err != nil {
+		http.Error(w, "Failed to retrieve node to delete", http.StatusInternalServerError)
+		return
+	}
+	if nodeToDelete == nil {
+		http.Error(w, "Node not found or access denied", http.StatusNotFound)
+		return
+	}
+
+	hasPermission, err := s.store.CheckWritePermission(r.Context(), claims.UserID, nodeToDelete.ParentID)
+	if err != nil {
+		http.Error(w, "Failed to verify permissions", http.StatusInternalServerError)
+		return
+	}
+	if !hasPermission {
+		http.Error(w, "You do not have permission to delete items in this folder", http.StatusForbidden)
+		return
+	}
+
 	txErr := s.store.ExecTx(r.Context(), func(q *database.Queries) error {
-		success, err := q.MoveNodeToTrash(r.Context(), nodeID, claims.UserID)
+		success, err := q.MoveNodeToTrash(r.Context(), nodeID, nodeToDelete.OwnerID)
 		if err != nil {
 			return err
 		}
@@ -398,8 +489,21 @@ func (s *Server) DeleteNodeHandler(w http.ResponseWriter, r *http.Request) {
 			return database.ErrNodeNotFound
 		}
 
-		payload := map[string]string{"id": nodeID}
-		return q.LogEvent(r.Context(), claims.UserID, "node_trashed", payload)
+		var parentID string
+		if nodeToDelete.ParentID != nil {
+			parentID = *nodeToDelete.ParentID
+		}
+
+		payload := map[string]string{"id": nodeID, "parent_id": parentID}
+		err = q.LogEvent(r.Context(), claims.UserID, "node_trashed", payload)
+		if err != nil {
+			return err
+		}
+
+		if claims.UserID != nodeToDelete.OwnerID {
+			err = q.LogEvent(r.Context(), nodeToDelete.OwnerID, "node_trashed", payload)
+		}
+		return err
 	})
 
 	if txErr != nil {
@@ -411,10 +515,18 @@ func (s *Server) DeleteNodeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	payload := map[string]string{"id": nodeID}
+	var parentID string
+	if nodeToDelete.ParentID != nil {
+		parentID = *nodeToDelete.ParentID
+	}
+	payload := map[string]string{"id": nodeID, "parent_id": parentID}
 	eventMsg := map[string]interface{}{"event_type": "node_trashed", "payload": payload}
 	eventBytes, _ := json.Marshal(eventMsg)
+
 	s.wsHub.PublishEvent(claims.UserID, eventBytes)
+	if claims.UserID != nodeToDelete.OwnerID {
+		s.wsHub.PublishEvent(nodeToDelete.OwnerID, eventBytes)
+	}
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -425,15 +537,17 @@ type UpdateNodeRequest struct {
 }
 
 // @Summary      Update a node
-// @Description  Updates a node's properties, such as its name or parent folder.
+// @Description  Updates a node's properties, such as its name or parent folder. To move a node to the root directory, provide "root" as the parent_id. Moving nodes between different owners is not allowed. Requires write permission in the source and target folders.
 // @Tags         nodes
 // @Accept       json
+// @Produce      json
 // @Security     BearerAuth
 // @Param        nodeId         path      string             true  "Node ID to update"
 // @Param        updateRequest  body      UpdateNodeRequest  true  "Properties to update"
-// @Success      200            {null}    nil                "OK"
-// @Failure      400            {string}  string "Bad Request"
+// @Success      200            {object}  NodeResponse
+// @Failure      400            {string}  string "Bad Request - Invalid operation (e.g., moving between owners, circular move)"
 // @Failure      401            {string}  string "Unauthorized"
+// @Failure      403            {string}  string "Forbidden - Write permission denied"
 // @Failure      404            {string}  string "Not Found"
 // @Failure      409            {string}  string "Conflict"
 // @Failure      500            {string}  string "Internal Server Error"
@@ -442,7 +556,7 @@ func (s *Server) UpdateNodeHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 	nodeID := chi.URLParam(r, "nodeId")
 
-	originalNode, err := s.store.GetNodeByID(r.Context(), nodeID, claims.UserID)
+	originalNode, err := s.store.GetNodeIfAccessible(r.Context(), nodeID, claims.UserID)
 	if err != nil {
 		http.Error(w, "Failed to retrieve node", http.StatusInternalServerError)
 		return
@@ -459,8 +573,19 @@ func (s *Server) UpdateNodeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var updated bool
+	var ownerNotified bool
 
 	if req.Name != nil {
+		hasPermission, err := s.store.CheckWritePermission(r.Context(), claims.UserID, originalNode.ParentID)
+		if err != nil {
+			http.Error(w, "Failed to verify permissions for renaming", http.StatusInternalServerError)
+			return
+		}
+		if !hasPermission {
+			http.Error(w, "You do not have permission to rename items in this folder", http.StatusForbidden)
+			return
+		}
+
 		newName := strings.TrimSpace(*req.Name)
 		if newName == "" {
 			http.Error(w, "Name cannot be empty", http.StatusBadRequest)
@@ -468,20 +593,22 @@ func (s *Server) UpdateNodeHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		txErr := s.store.ExecTx(r.Context(), func(q *database.Queries) error {
-			success, err := q.RenameNode(r.Context(), nodeID, claims.UserID, newName)
+			success, err := q.RenameNode(r.Context(), nodeID, originalNode.OwnerID, newName)
 			if err != nil {
 				return err
 			}
 			if !success {
 				return database.ErrNodeNotFound
 			}
-
-			payload := map[string]interface{}{
-				"id":       nodeID,
-				"new_name": newName,
-				"old_name": originalNode.Name,
+			payload := map[string]interface{}{"id": nodeID, "new_name": newName, "old_name": originalNode.Name}
+			err = q.LogEvent(r.Context(), claims.UserID, "node_renamed", payload)
+			if err != nil {
+				return err
 			}
-			return q.LogEvent(r.Context(), claims.UserID, "node_renamed", payload)
+			if claims.UserID != originalNode.OwnerID {
+				err = q.LogEvent(r.Context(), originalNode.OwnerID, "node_renamed", payload)
+			}
+			return err
 		})
 
 		if txErr != nil {
@@ -501,19 +628,69 @@ func (s *Server) UpdateNodeHandler(w http.ResponseWriter, r *http.Request) {
 		eventMsg := map[string]interface{}{"event_type": "node_renamed", "payload": payload}
 		eventBytes, _ := json.Marshal(eventMsg)
 		s.wsHub.PublishEvent(claims.UserID, eventBytes)
-
+		if claims.UserID != originalNode.OwnerID {
+			s.wsHub.PublishEvent(originalNode.OwnerID, eventBytes)
+			ownerNotified = true
+		}
 		updated = true
 	}
 
 	if req.ParentID != nil {
-		newParentID := *req.ParentID
-		if len(newParentID) != 21 {
-			http.Error(w, "Invalid ParentID format", http.StatusBadRequest)
+		newParentIDStr := *req.ParentID
+		var newParentID *string
+
+		if newParentIDStr != "root" {
+			if len(newParentIDStr) != 21 {
+				http.Error(w, "Invalid ParentID format", http.StatusBadRequest)
+				return
+			}
+			newParentID = &newParentIDStr
+		}
+
+		var destParentNode *models.Node
+		var destOwnerID int64 = claims.UserID
+
+		if newParentID != nil {
+			var err error
+			destParentNode, err = s.store.GetNodeIfAccessible(r.Context(), *newParentID, claims.UserID)
+			if err != nil || destParentNode == nil {
+				http.Error(w, "Target folder not found or access denied", http.StatusNotFound)
+				return
+			}
+			destOwnerID = destParentNode.OwnerID
+		}
+
+		if originalNode.OwnerID != destOwnerID {
+			http.Error(w, "Moving files between different owners is not allowed. Please copy the file instead.", http.StatusBadRequest)
+			return
+		}
+
+		hasPermissionSource, err := s.store.CheckWritePermission(r.Context(), claims.UserID, originalNode.ParentID)
+		if err != nil {
+			http.Error(w, "Failed to verify source permissions", http.StatusInternalServerError)
+			return
+		}
+		if !hasPermissionSource {
+			http.Error(w, "You do not have permission to move this item", http.StatusForbidden)
+			return
+		}
+
+		hasPermissionDest, err := s.store.CheckWritePermission(r.Context(), claims.UserID, newParentID)
+		if err != nil {
+			http.Error(w, "Failed to verify target permissions", http.StatusInternalServerError)
+			return
+		}
+		if !hasPermissionDest {
+			http.Error(w, "You do not have permission to move items into the target folder", http.StatusForbidden)
 			return
 		}
 
 		if originalNode.NodeType == "folder" {
-			isCircular, err := s.store.IsDescendantOf(r.Context(), nodeID, newParentID)
+			var potentialParentID string
+			if newParentID != nil {
+				potentialParentID = *newParentID
+			}
+			isCircular, err := s.store.IsDescendantOf(r.Context(), nodeID, potentialParentID)
 			if err != nil {
 				http.Error(w, "Failed to validate move operation", http.StatusInternalServerError)
 				return
@@ -525,7 +702,7 @@ func (s *Server) UpdateNodeHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		txErr := s.store.ExecTx(r.Context(), func(q *database.Queries) error {
-			success, err := q.MoveNode(r.Context(), nodeID, claims.UserID, &newParentID)
+			success, err := q.MoveNode(r.Context(), nodeID, originalNode.OwnerID, newParentID)
 			if err != nil {
 				return err
 			}
@@ -533,12 +710,16 @@ func (s *Server) UpdateNodeHandler(w http.ResponseWriter, r *http.Request) {
 				return database.ErrNodeNotFound
 			}
 
-			payload := map[string]interface{}{
-				"id":            nodeID,
-				"new_parent_id": newParentID,
-				"old_parent_id": originalNode.ParentID,
+			payload := map[string]interface{}{"id": nodeID, "new_parent_id": req.ParentID, "old_parent_id": originalNode.ParentID}
+			err = q.LogEvent(r.Context(), claims.UserID, "node_moved", payload)
+			if err != nil {
+				return err
 			}
-			return q.LogEvent(r.Context(), claims.UserID, "node_moved", payload)
+
+			if claims.UserID != originalNode.OwnerID {
+				err = q.LogEvent(r.Context(), originalNode.OwnerID, "node_moved", payload)
+			}
+			return err
 		})
 
 		if txErr != nil {
@@ -554,11 +735,13 @@ func (s *Server) UpdateNodeHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		payload := map[string]interface{}{"id": nodeID, "new_parent_id": newParentID, "old_parent_id": originalNode.ParentID}
+		payload := map[string]interface{}{"id": nodeID, "new_parent_id": req.ParentID, "old_parent_id": originalNode.ParentID}
 		eventMsg := map[string]interface{}{"event_type": "node_moved", "payload": payload}
 		eventBytes, _ := json.Marshal(eventMsg)
 		s.wsHub.PublishEvent(claims.UserID, eventBytes)
-
+		if !ownerNotified && claims.UserID != originalNode.OwnerID {
+			s.wsHub.PublishEvent(originalNode.OwnerID, eventBytes)
+		}
 		updated = true
 	}
 
@@ -567,7 +750,7 @@ func (s *Server) UpdateNodeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updatedNode, _ := s.store.GetNodeByID(r.Context(), nodeID, claims.UserID)
+	updatedNode, _ := s.store.GetNodeByID(r.Context(), nodeID, originalNode.OwnerID)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(updatedNode)
