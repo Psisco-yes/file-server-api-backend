@@ -170,7 +170,7 @@ Wszystkie komunikaty są wysyłane w formacie JSON i mają następującą strukt
 ```json
 {
   "event_type": "nazwa_zdarzenia",
-  "payload": { ... }
+  "payload": { "some": "data" }
 }
 ```
 
@@ -237,4 +237,3 @@ Lista zidentyfikowanych problemów i planowanych do wdrożenia funkcjonalności.
 -   [ ] **Kopiowanie Plików i Folderów:** Dodanie możliwości tworzenia kopii plików i całych struktur folderów.
 -   [ ] **Wyszukiwarka Plików:** Zaimplementowanie endpointu pozwalającego na wyszukiwanie plików i folderów po nazwie w całej dostępnej przestrzeni użytkownika (własne i udostępnione).
 -   [ ] **Dziennik Audytowy (Audit Log):** Stworzenie oddzielnego, niezmiennego dziennika zdarzeń związanych z bezpieczeństwem (logowanie, dostęp do plików, zmiany uprawnień) w celu zapewnienia rozliczalności i zgodności z RODO.
-```
