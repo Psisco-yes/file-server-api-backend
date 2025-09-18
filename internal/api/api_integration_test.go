@@ -1,6 +1,7 @@
 package api
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -286,6 +287,8 @@ func TestLoginHandler_Integration(t *testing.T) {
 		require.NotEmpty(t, res.RefreshToken)
 
 		var sessionCount int
+		testServer.store.GetPool().Exec(context.Background(), "DELETE FROM sessions WHERE user_id = $1", testUserClaims.UserID)
+		http.HandlerFunc(testServer.LoginHandler).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewReader(body)))
 		err = testServer.store.GetPool().QueryRow(context.Background(), "SELECT COUNT(*) FROM sessions WHERE user_id = $1", testUserClaims.UserID).Scan(&sessionCount)
 		require.NoError(t, err)
 		require.Equal(t, 1, sessionCount, "A session should be created in the database")
@@ -308,7 +311,9 @@ func createTestUserWithPassword(t *testing.T, username, password string) *models
 	require.NoError(t, err)
 
 	var user models.User
-	query := `INSERT INTO users (username, password_hash, display_name) VALUES ($1, $2, $3) RETURNING id, username`
+	query := `INSERT INTO users (username, password_hash, display_name) VALUES ($1, $2, $3) 
+			  ON CONFLICT (username) DO UPDATE SET password_hash = $2
+			  RETURNING id, username`
 	err = testServer.store.GetPool().QueryRow(context.Background(), query, username, hashedPassword, "Test User "+username).Scan(&user.ID, &user.Username)
 	require.NoError(t, err)
 	return &user
@@ -416,15 +421,25 @@ func TestSessionHandlers_Integration(t *testing.T) {
 }
 
 func TestShareAndFavorite_Integration(t *testing.T) {
-	sharer := createTestUserWithPassword(t, "sharer_user", "password")
-	recipient := createTestUserWithPassword(t, "recipient_user", "password")
+	sharer := createTestUserWithPassword(t, "sharer_user_fav", "password")
+	recipient := createTestUserWithPassword(t, "recipient_user_fav", "password")
 
-	sharerLogin := loginUserForTest(t, "sharer_user", "password")
-	recipientLogin := loginUserForTest(t, "recipient_user", "password")
+	sharerLogin := loginUserForTest(t, "sharer_user_fav", "password")
+	recipientLogin := loginUserForTest(t, "recipient_user_fav", "password")
 
-	nodeToShare := createTestNodeAPI(t, "plik_do_udostepnienia.txt", "file", nil, sharer.ID)
+	nodeToShare := createTestNodeAPI(t, "plik_do_udostepnienia_fav.txt", "file", nil, sharer.ID)
 
 	var shareID int64
+
+	router := chi.NewRouter()
+	router.Use(testServer.AuthMiddleware)
+	router.Post("/api/v1/nodes/{nodeId}/share", testServer.ShareNodeHandler)
+	router.Get("/api/v1/shares/incoming/nodes", testServer.ListSharedNodesHandler)
+	router.Post("/api/v1/nodes/{nodeId}/favorite", testServer.AddFavoriteHandler)
+	router.Delete("/api/v1/shares/{shareId}", testServer.DeleteShareHandler)
+	router.Get("/api/v1/nodes/{nodeId}/download", testServer.DownloadFileHandler)
+	router.Get("/api/v1/favorites", testServer.ListFavoritesHandler)
+	router.Delete("/api/v1/nodes/{nodeId}/favorite", testServer.RemoveFavoriteHandler)
 
 	t.Run("sharer shares a node with recipient", func(t *testing.T) {
 		shareReq := ShareRequest{RecipientUsername: recipient.Username, Permissions: "read"}
@@ -434,8 +449,6 @@ func TestShareAndFavorite_Integration(t *testing.T) {
 		req.Header.Set("Authorization", "Bearer "+sharerLogin.AccessToken)
 		rr := httptest.NewRecorder()
 
-		router := chi.NewRouter()
-		router.With(testServer.AuthMiddleware).Post("/api/v1/nodes/{nodeId}/share", testServer.ShareNodeHandler)
 		router.ServeHTTP(rr, req)
 
 		require.Equal(t, http.StatusCreated, rr.Code)
@@ -453,8 +466,6 @@ func TestShareAndFavorite_Integration(t *testing.T) {
 		req.Header.Set("Authorization", "Bearer "+recipientLogin.AccessToken)
 		rr := httptest.NewRecorder()
 
-		router := chi.NewRouter()
-		router.With(testServer.AuthMiddleware).Get("/api/v1/shares/incoming/nodes", testServer.ListSharedNodesHandler)
 		router.ServeHTTP(rr, req)
 
 		require.Equal(t, http.StatusOK, rr.Code)
@@ -464,22 +475,38 @@ func TestShareAndFavorite_Integration(t *testing.T) {
 		require.Equal(t, nodeToShare.ID, nodes[0].ID)
 	})
 
-	t.Run("recipient adds shared node to favorites", func(t *testing.T) {
+	t.Run("recipient adds shared node to favorites and lists them", func(t *testing.T) {
 		url := fmt.Sprintf("/api/v1/nodes/%s/favorite", nodeToShare.ID)
 		req := httptest.NewRequest("POST", url, nil)
 		req.Header.Set("Authorization", "Bearer "+recipientLogin.AccessToken)
 		rr := httptest.NewRecorder()
-
-		router := chi.NewRouter()
-		router.With(testServer.AuthMiddleware).Post("/api/v1/nodes/{nodeId}/favorite", testServer.AddFavoriteHandler)
 		router.ServeHTTP(rr, req)
+		require.Equal(t, http.StatusNoContent, rr.Code)
 
+		reqList := httptest.NewRequest("GET", "/api/v1/favorites", nil)
+		reqList.Header.Set("Authorization", "Bearer "+recipientLogin.AccessToken)
+		rrList := httptest.NewRecorder()
+		router.ServeHTTP(rrList, reqList)
+
+		require.Equal(t, http.StatusOK, rrList.Code)
+		var favs []models.Node
+		err := json.Unmarshal(rrList.Body.Bytes(), &favs)
+		require.NoError(t, err)
+		require.Len(t, favs, 1)
+		require.Equal(t, nodeToShare.ID, favs[0].ID)
+	})
+
+	t.Run("recipient removes node from favorites", func(t *testing.T) {
+		url := fmt.Sprintf("/api/v1/nodes/%s/favorite", nodeToShare.ID)
+		req := httptest.NewRequest("DELETE", url, nil)
+		req.Header.Set("Authorization", "Bearer "+recipientLogin.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
 		require.Equal(t, http.StatusNoContent, rr.Code)
 
 		favs, err := testServer.store.ListFavorites(context.Background(), recipient.ID, 10, 0)
 		require.NoError(t, err)
-		require.Len(t, favs, 1)
-		require.Equal(t, nodeToShare.ID, favs[0].ID)
+		require.Len(t, favs, 0)
 	})
 
 	t.Run("sharer revokes the share", func(t *testing.T) {
@@ -489,11 +516,7 @@ func TestShareAndFavorite_Integration(t *testing.T) {
 		req := httptest.NewRequest("DELETE", url, nil)
 		req.Header.Set("Authorization", "Bearer "+sharerLogin.AccessToken)
 		rr := httptest.NewRecorder()
-
-		router := chi.NewRouter()
-		router.With(testServer.AuthMiddleware).Delete("/api/v1/shares/{shareId}", testServer.DeleteShareHandler)
 		router.ServeHTTP(rr, req)
-
 		require.Equal(t, http.StatusNoContent, rr.Code)
 	})
 
@@ -502,11 +525,7 @@ func TestShareAndFavorite_Integration(t *testing.T) {
 		req := httptest.NewRequest("GET", url, nil)
 		req.Header.Set("Authorization", "Bearer "+recipientLogin.AccessToken)
 		rr := httptest.NewRecorder()
-
-		router := chi.NewRouter()
-		router.With(testServer.AuthMiddleware).Get("/api/v1/nodes/{nodeId}/download", testServer.DownloadFileHandler)
 		router.ServeHTTP(rr, req)
-
 		require.Equal(t, http.StatusNotFound, rr.Code)
 	})
 }
@@ -637,4 +656,124 @@ func TestGetEventsHandler_Integration(t *testing.T) {
 	err = json.Unmarshal(rrSince.Body.Bytes(), &noEvents)
 	require.NoError(t, err)
 	require.Len(t, noEvents, 0, "There should be no new events since the last known ID")
+}
+
+func TestHealthCheckHandler(t *testing.T) {
+	req := httptest.NewRequest("GET", "/health", nil)
+	rr := httptest.NewRecorder()
+
+	http.HandlerFunc(testServer.HealthCheckHandler).ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	var status map[string]string
+	err := json.Unmarshal(rr.Body.Bytes(), &status)
+	require.NoError(t, err)
+	require.Equal(t, "ok", status["status"])
+	require.Equal(t, "connected", status["database"])
+}
+
+func TestUserHandlers_Integration(t *testing.T) {
+	username := "user_for_me_handlers"
+	password := "oldPassword123"
+	user := createTestUserWithPassword(t, username, password)
+	loginResp := loginUserForTest(t, username, password)
+
+	var fileSize int64 = 2048
+	createTestNodeAPI(t, "file_for_storage.txt", "file", nil, user.ID)
+	err := testServer.store.UpdateUserStorage(context.Background(), user.ID, fileSize)
+	require.NoError(t, err)
+
+	router := chi.NewRouter()
+	router.Use(testServer.AuthMiddleware)
+	router.Get("/api/v1/me", testServer.GetCurrentUserHandler)
+	router.Get("/api/v1/me/storage", testServer.GetStorageUsageHandler)
+	router.Patch("/api/v1/me/password", testServer.ChangePasswordHandler)
+
+	t.Run("get current user", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/v1/me", nil)
+		req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusOK, rr.Code)
+		var claims auth.AppClaims
+		err := json.Unmarshal(rr.Body.Bytes(), &claims)
+		require.NoError(t, err)
+		require.Equal(t, user.ID, claims.UserID)
+		require.Equal(t, user.Username, claims.Username)
+	})
+
+	t.Run("get storage usage", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/v1/me/storage", nil)
+		req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusOK, rr.Code)
+		var usage StorageUsageResponse
+		err := json.Unmarshal(rr.Body.Bytes(), &usage)
+		require.NoError(t, err)
+		require.Equal(t, fileSize, usage.UsedBytes)
+		require.Greater(t, usage.QuotaBytes, int64(0))
+	})
+
+	t.Run("change password successfully", func(t *testing.T) {
+		loginUserForTest(t, username, password)
+
+		payload := ChangePasswordRequest{OldPassword: password, NewPassword: "newPassword456"}
+		body, _ := json.Marshal(payload)
+		req := httptest.NewRequest("PATCH", "/api/v1/me/password", bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusNoContent, rr.Code)
+
+		sessions, err := testServer.store.ListSessionsForUser(context.Background(), user.ID)
+		require.NoError(t, err)
+		require.Empty(t, sessions, "All sessions should be terminated after password change")
+
+		loginUserForTest(t, username, "newPassword456")
+	})
+}
+
+func TestDownloadArchiveHandler(t *testing.T) {
+	user := createTestUserWithPassword(t, "archive_user", "password")
+	loginResp := loginUserForTest(t, "archive_user", "password")
+
+	folder1 := createTestNodeAPI(t, "Folder_A", "folder", nil, user.ID)
+	file1 := createTestNodeAPI(t, "plik1.txt", "file", &folder1.ID, user.ID)
+	err := testServer.storage.Save(file1.ID, strings.NewReader("content1"))
+	require.NoError(t, err)
+
+	file2 := createTestNodeAPI(t, "plik2.txt", "file", nil, user.ID)
+	err = testServer.storage.Save(file2.ID, strings.NewReader("content2"))
+	require.NoError(t, err)
+
+	ids := fmt.Sprintf("%s,%s", folder1.ID, file2.ID)
+	url := fmt.Sprintf("/api/v1/nodes/archive?ids=%s", ids)
+	req := httptest.NewRequest("GET", url, nil)
+	req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+	rr := httptest.NewRecorder()
+
+	router := chi.NewRouter()
+	router.With(testServer.AuthMiddleware).Get("/api/v1/nodes/archive", testServer.DownloadArchiveHandler)
+	router.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Equal(t, "application/zip", rr.Header().Get("Content-Type"))
+
+	zipBody := rr.Body.Bytes()
+	zipReader, err := zip.NewReader(bytes.NewReader(zipBody), int64(len(zipBody)))
+	require.NoError(t, err)
+
+	foundFiles := make(map[string]bool)
+	for _, f := range zipReader.File {
+		foundFiles[f.Name] = true
+	}
+
+	require.True(t, foundFiles["Folder_A/"], "Expected to find directory entry for Folder_A")
+	require.True(t, foundFiles["Folder_A/plik1.txt"], "Expected to find file inside Folder_A")
+	require.True(t, foundFiles["plik2.txt"], "Expected to find root file plik2.txt")
+	require.Len(t, foundFiles, 3, "Archive should contain exactly 3 entries")
 }

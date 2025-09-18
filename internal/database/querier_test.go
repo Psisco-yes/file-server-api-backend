@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"serwer-plikow/internal/auth"
 	"serwer-plikow/internal/models"
 	"testing"
 	"time"
@@ -493,8 +494,10 @@ func TestGetUserByUsername(t *testing.T) {
 
 	require.Equal(t, createdUser.ID, foundUser.ID)
 	require.Equal(t, createdUser.Username, foundUser.Username)
-	require.Equal(t, fmt.Sprintf("User %s", createdUser.Username), foundUser.DisplayName)
 	require.NotEmpty(t, foundUser.PasswordHash)
+
+	require.NotNil(t, foundUser.DisplayName)
+	require.Equal(t, fmt.Sprintf("User %s", createdUser.Username), *foundUser.DisplayName)
 
 	nonExistentUser, err := testStore.GetUserByUsername(context.Background(), "nonexistentuser")
 	require.NoError(t, err)
@@ -832,4 +835,95 @@ func TestDeleteSessionByRefreshToken(t *testing.T) {
 	foundUser, err = testStore.GetUserByRefreshToken(context.Background(), tokenToKeep)
 	require.NoError(t, err)
 	require.NotNil(t, foundUser)
+}
+
+func TestUpdateUserPassword(t *testing.T) {
+	user := createTestUser(t, "user_pass_update")
+	newPassword := "newSecurePassword123"
+	newPasswordHash, err := auth.HashPassword(newPassword)
+	require.NoError(t, err)
+
+	err = testStore.UpdateUserPassword(context.Background(), user.ID, newPasswordHash)
+	require.NoError(t, err)
+
+	updatedUser, err := testStore.GetUserByUsername(context.Background(), user.Username)
+	require.NoError(t, err)
+	require.NotNil(t, updatedUser)
+	require.Equal(t, newPasswordHash, updatedUser.PasswordHash)
+	require.True(t, auth.CheckPasswordHash(newPassword, updatedUser.PasswordHash))
+	require.False(t, auth.CheckPasswordHash("oldPassword", updatedUser.PasswordHash))
+}
+
+func TestCheckWritePermission(t *testing.T) {
+	owner := createTestUser(t, "perm_owner")
+	writer := createTestUser(t, "perm_writer")
+	reader := createTestUser(t, "perm_reader")
+	other := createTestUser(t, "perm_other")
+
+	rootFolder := createTestNode(t, CreateNodeParams{ID: "perm_root", OwnerID: owner.ID, Name: "Root Folder", NodeType: "folder"})
+	writeFolder := createTestNode(t, CreateNodeParams{ID: "perm_write", OwnerID: owner.ID, Name: "Write Folder", ParentID: &rootFolder.ID, NodeType: "folder"})
+	readFolder := createTestNode(t, CreateNodeParams{ID: "perm_read", OwnerID: owner.ID, Name: "Read Folder", ParentID: &writeFolder.ID, NodeType: "folder"})
+
+	createTestShare(t, ShareNodeParams{NodeID: writeFolder.ID, SharerID: owner.ID, RecipientID: writer.ID, Permissions: "write"})
+	createTestShare(t, ShareNodeParams{NodeID: readFolder.ID, SharerID: owner.ID, RecipientID: reader.ID, Permissions: "read"})
+
+	t.Run("owner has write permission everywhere", func(t *testing.T) {
+		hasPerm, err := testStore.CheckWritePermission(context.Background(), owner.ID, nil)
+		require.NoError(t, err)
+		require.True(t, hasPerm)
+		hasPerm, err = testStore.CheckWritePermission(context.Background(), owner.ID, &rootFolder.ID)
+		require.NoError(t, err)
+		require.True(t, hasPerm)
+		hasPerm, err = testStore.CheckWritePermission(context.Background(), owner.ID, &writeFolder.ID)
+		require.NoError(t, err)
+		require.True(t, hasPerm)
+		hasPerm, err = testStore.CheckWritePermission(context.Background(), owner.ID, &readFolder.ID)
+		require.NoError(t, err)
+		require.True(t, hasPerm)
+	})
+
+	t.Run("writer has write permission in shared folder and its children", func(t *testing.T) {
+		hasPerm, err := testStore.CheckWritePermission(context.Background(), writer.ID, &writeFolder.ID)
+		require.NoError(t, err)
+		require.True(t, hasPerm)
+		hasPerm, err = testStore.CheckWritePermission(context.Background(), writer.ID, &readFolder.ID)
+		require.NoError(t, err)
+		require.True(t, hasPerm)
+	})
+
+	t.Run("writer does not have permission outside shared scope", func(t *testing.T) {
+		hasPerm, err := testStore.CheckWritePermission(context.Background(), writer.ID, &rootFolder.ID)
+		require.NoError(t, err)
+		require.False(t, hasPerm)
+	})
+
+	t.Run("reader has no write permission", func(t *testing.T) {
+		hasPerm, err := testStore.CheckWritePermission(context.Background(), reader.ID, &readFolder.ID)
+		require.NoError(t, err)
+		require.False(t, hasPerm)
+		hasPerm, err = testStore.CheckWritePermission(context.Background(), reader.ID, &writeFolder.ID)
+		require.NoError(t, err)
+		require.False(t, hasPerm)
+	})
+
+	t.Run("other user has no permissions", func(t *testing.T) {
+		hasPerm, err := testStore.CheckWritePermission(context.Background(), other.ID, &readFolder.ID)
+		require.NoError(t, err)
+		require.False(t, hasPerm)
+	})
+}
+
+func TestGetUserByID(t *testing.T) {
+	user := createTestUser(t, "get_by_id_user")
+
+	foundUser, err := testStore.GetUserByID(context.Background(), user.ID)
+	require.NoError(t, err)
+
+	require.NotNil(t, foundUser)
+	require.Equal(t, user.ID, foundUser.ID)
+	require.Equal(t, user.Username, foundUser.Username)
+
+	notFoundUser, err := testStore.GetUserByID(context.Background(), 999999)
+	require.NoError(t, err)
+	require.Nil(t, notFoundUser)
 }
