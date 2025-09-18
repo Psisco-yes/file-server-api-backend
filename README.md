@@ -1,6 +1,3 @@
-
----
-
 # Go File Server
 
 ## Opis Projektu
@@ -9,9 +6,9 @@ W pełni funkcjonalny, REST-owy serwer plików zbudowany w Go, inspirowany syste
 
 ## Kluczowe Funkcjonalności
 
-- **Zarządzanie Plikami i Folderami:** Pełen CRUD (tworzenie, listowanie, zmiana nazwy, przenoszenie).
+- **Zarządzanie Plikami i Folderami:** Rozbudowane operacje na plikach i folderach (tworzenie, listowanie, zmiana nazwy, przenoszenie).
 - **Bezpieczeństwo:** Autentykacja oparta na JWT z rotacją refresh tokenów, zarządzanie sesjami, obsługa HTTPS.
-- **Udostępnianie:** Możliwość udostępniania plików i folderów innym użytkownikom z dziedziczeniem uprawnień.
+- **Udostępnianie:** Możliwość udostępniania plików i folderów innym użytkownikom z dziedziczeniem uprawnień (read/write).
 - **Funkcje UX:** Kosz z opcją przywracania, ulubione, pobieranie wielu plików/folderów jako archiwum ZIP.
 - **System Czasu Rzeczywistego:**
   - **Dziennik Zdarzeń:** Umożliwia wydajną synchronizację dla klientów działających w trybie offline.
@@ -42,6 +39,10 @@ W pełni funkcjonalny, REST-owy serwer plików zbudowany w Go, inspirowany syste
     ```
 - Serwer będzie dostępny pod adresem `https://localhost`.
 - Dokumentacja API Swaggera jest dostępna pod adresem `https://localhost/swagger/index.html`.
+
+Po pierwszym uruchomieniu, w systemie dostępne są domyślne konta do testowania (zgodnie z `db/init.sql`):
+- **Użytkownik:** `admin`, **Hasło:** `admin`
+- **Użytkownik:** `user`, **Hasło:** `user`
 
 ## Zarządzanie Administracyjne (Skrypty PowerShell)
 
@@ -146,3 +147,93 @@ Wszystkie chronione endpointy wymagają nagłówka `Authorization: Bearer <acces
 - `DELETE /trash/purge`: Opróżnij kosz.
 - `GET /events`: Pobierz nowe zdarzenia do synchronizacji.
 - `GET /ws`: Połączenie WebSocket.
+
+---
+
+## Aktualizacje w Czasie Rzeczywistym (WebSockets)
+
+Serwer wykorzystuje WebSockets do natychmiastowego powiadamiania podłączonych klientów o wszystkich istotnych zdarzeniach w systemie. Eliminuje to potrzebę cyklicznego odpytywania endpointu `/events` (polling) i zapewnia płynne działanie interfejsu użytkownika.
+
+### Nawiązywanie Połączenia
+
+- **Endpoint:** `GET /ws` (protokół `wss://`)
+- **URL Połączenia:** `wss://localhost/ws?token=<access_token>`
+
+Uwierzytelnienie odbywa się poprzez przekazanie ważnego tokena dostępowego (JWT) jako parametru zapytania o nazwie `token`. Jeśli token jest nieprawidłowy lub wygasł, połączenie zostanie odrzucone.
+
+### Format Komunikatów
+
+Po nawiązaniu połączenia, komunikacja jest jednostronna – serwer wysyła komunikaty do klienta. Klient nie musi wysyłać żadnych wiadomości, jego jedynym zadaniem jest nasłuchiwanie.
+
+Wszystkie komunikaty są wysyłane w formacie JSON i mają następującą strukturę:
+
+```json
+{
+  "event_type": "nazwa_zdarzenia",
+  "payload": { ... }
+}
+```
+
+- `event_type` (string): Identyfikator typu zdarzenia (np. `node_created`, `node_trashed`).
+- `payload` (object): Obiekt zawierający dane związane ze zdarzeniem. Jego struktura zależy od `event_type`.
+
+### Przykładowe Zdarzenia
+
+**1. Utworzono nowy plik/folder (`node_created`):**
+```json
+{
+  "event_type": "node_created",
+  "payload": {
+    "id": "_vx2a-43VqRT5wz_s9u4",
+    "owner_id": 1,
+    "parent_id": "fLW5kAh2ia9vYmjMnU4nZ",
+    "name": "Nowy Raport.docx",
+    "node_type": "file",
+    "size_bytes": 12345,
+    "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "created_at": "2024-08-27T10:00:00Z",
+    "modified_at": "2024-08-27T10:00:00Z"
+  }
+}
+```
+
+**2. Plik został przeniesiony do kosza (`node_trashed`):**
+```json
+{
+  "event_type": "node_trashed",
+  "payload": {
+    "id": "_vx2a-43VqRT5wz_s9u4",
+    "parent_id": "fLW5kAh2ia9vYmjMnU4nZ"
+  }
+}
+```
+
+**3. Ktoś cofnął Ci udostępnienie pliku (`share_revoked_for_you`):**
+```json
+{
+  "event_type": "share_revoked_for_you",
+  "payload": {
+    "node_id": "zInneIDPliku987654321"
+  }
+}
+```
+
+---
+
+## Roadmap / TODO
+
+Lista zidentyfikowanych problemów i planowanych do wdrożenia funkcjonalności.
+
+### Błędy Krytyczne i Ograniczenia do Naprawy
+
+-   [ ] **Niekompletne przywracanie z kosza:** Przywrócenie usuniętego folderu odtwarza tylko sam folder, bez jego zawartości, co prowadzi do utraty danych. Należy zaimplementować rekurencyjne przywracanie.
+-   [ ] **Błąd archiwizacji (ZIP) dla dużych folderów:** Funkcja pobierania archiwum ZIP jest ograniczona do 1000 elementów na folder, co skutkuje tworzeniem niekompletnych archiwów bez informowania o tym użytkownika.
+-   [ ] **Brak obsługi dużych plików:** Obecne ograniczenie uploadu do 1 GB i brak mechanizmu "chunked upload" uniemożliwia wgrywanie większych plików i obciąża pamięć RAM serwera.
+-   [ ] **Wysokie zużycie RAM przy archiwizacji:** Mechanizm tworzenia archiwum ZIP zbiera metadane wszystkich plików w pamięci przed rozpoczęciem pakowania, co może prowadzić do problemów z wydajnością przy bardzo dużej liczbie plików.
+
+### Nowe Funkcje do Implementacji
+
+-   [ ] **Kopiowanie Plików i Folderów:** Dodanie możliwości tworzenia kopii plików i całych struktur folderów.
+-   [ ] **Wyszukiwarka Plików:** Zaimplementowanie endpointu pozwalającego na wyszukiwanie plików i folderów po nazwie w całej dostępnej przestrzeni użytkownika (własne i udostępnione).
+-   [ ] **Dziennik Audytowy (Audit Log):** Stworzenie oddzielnego, niezmiennego dziennika zdarzeń związanych z bezpieczeństwem (logowanie, dostęp do plików, zmiany uprawnień) w celu zapewnienia rozliczalności i zgodności z RODO.
+```
