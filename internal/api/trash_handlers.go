@@ -53,17 +53,15 @@ func (s *Server) PurgeTrashHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// @Summary      Restore a node from trash
-// @Description  Restores a file or folder from the trash to its original location. Fails if a node with the same name already exists in the target location.
-// @Tags         nodes
+// @Summary      List trash contents
+// @Description  Retrieves a list of all files and folders currently in the user's trash.
+// @Tags         trash
+// @Produce      json
 // @Security     BearerAuth
-// @Param        nodeId   path      string  true  "Node ID to restore"
-// @Success      200      {null}    nil   "OK"
-// @Failure      401      {string}  string "Unauthorized"
-// @Failure      404      {string}  string "Not Found"
-// @Failure      409      {string}  string "Conflict - a node with the same name already exists in the original location"
-// @Failure      500      {string}  string "Internal Server Error"
-// @Router       /nodes/{nodeId}/restore [post]
+// @Success      200  {array}   NodeResponse
+// @Failure      401  {string}  string "Unauthorized"
+// @Failure      500  {string}  string "Internal Server Error"
+// @Router       /trash [get]
 func (s *Server) ListTrashHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 	limit, offset := parsePagination(r)
@@ -78,15 +76,17 @@ func (s *Server) ListTrashHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(nodes)
 }
 
-// @Summary      List trash contents
-// @Description  Retrieves a list of all files and folders currently in the user's trash.
-// @Tags         trash
-// @Produce      json
+// @Summary      Restore a node from trash
+// @Description  Restores a file or folder from the trash to its original location. Fails if a node with the same name already exists in the target location.
+// @Tags         nodes
 // @Security     BearerAuth
-// @Success      200  {array}   NodeResponse
-// @Failure      401  {string}  string "Unauthorized"
-// @Failure      500  {string}  string "Internal Server Error"
-// @Router       /trash [get]
+// @Param        nodeId   path      string  true  "Node ID to restore"
+// @Success      200      {null}    nil   "OK"
+// @Failure      401      {string}  string "Unauthorized"
+// @Failure      404      {string}  string "Not Found"
+// @Failure      409      {string}  string "Conflict - a node with the same name already exists in the original location"
+// @Failure      500      {string}  string "Internal Server Error"
+// @Router       /nodes/{nodeId}/restore [post]
 func (s *Server) RestoreNodeHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 	nodeID := chi.URLParam(r, "nodeId")

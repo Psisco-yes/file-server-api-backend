@@ -113,12 +113,6 @@ func (s *Server) ChangePasswordHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = s.store.UpdateUserPassword(r.Context(), claims.UserID, newPasswordHash)
-	if err != nil {
-		http.Error(w, "Failed to update password", http.StatusInternalServerError)
-		return
-	}
-
 	txErr := s.store.ExecTx(r.Context(), func(q *database.Queries) error {
 		if err := q.UpdateUserPassword(r.Context(), claims.UserID, newPasswordHash); err != nil {
 			return err

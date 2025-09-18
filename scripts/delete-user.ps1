@@ -27,16 +27,7 @@ if ($lines.Count -lt 3) {
 
 Write-Host "Found $($fileIdArray.Count) files to delete from storage."
 
-Write-Host "Deleting user '$Username' from the database..."
-Get-Content -Path ".\scripts\sql\deleteuser.sql" -Raw | docker exec -i fileserver_db psql -U fileserver -d fileserver_db `
-    -v username="$Username" | Out-String
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "Error deleting user from database. Please check storage for orphaned files. Aborting." -ForegroundColor Red
-    exit 1
-}
-Write-Host "Database records for user '$Username' have been deleted." -ForegroundColor Green
-
+$errorsOccurred = $false
 if ($fileIdArray.Count -gt 0) {
     Write-Host "Deleting physical files from storage volume..."
     foreach ($fileId in $fileIdArray) {
@@ -46,11 +37,33 @@ if ($fileIdArray.Count -gt 0) {
             Write-Host "  - Deleting file: $filePathInContainer"
             
             docker exec fileserver_app rm $filePathInContainer
+            
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "  - FAILED to delete file: $filePathInContainer. Aborting before database deletion." -ForegroundColor Red
+                $errorsOccurred = $true
+                break
+            }
         }
     }
+    
+    if ($errorsOccurred) {
+        Write-Host "Errors occurred during physical file deletion. The user has NOT been deleted from the database. Please resolve the file system issues and run the script again." -ForegroundColor Red
+        exit 1
+    }
+
     Write-Host "Physical file cleanup complete." -ForegroundColor Green
 } else {
     Write-Host "User had no physical files to delete."
 }
 
+Write-Host "Deleting user '$Username' from the database..."
+Get-Content -Path ".\scripts\sql\deleteuser.sql" -Raw | docker exec -i fileserver_db psql -U fileserver -d fileserver_db `
+    -v username="$Username" | Out-String
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "CRITICAL: Physical files were deleted, but there was an error deleting the user from the database. Please investigate manually." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host "Database records for user '$Username' have been deleted." -ForegroundColor Green
 Write-Host "Successfully purged user '$Username' and all associated data." -ForegroundColor Cyan
