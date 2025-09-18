@@ -230,6 +230,7 @@ Lista zidentyfikowanych problemów i planowanych do wdrożenia funkcjonalności.
 -   [ ] **Błąd archiwizacji (ZIP) dla dużych folderów:** Funkcja pobierania archiwum ZIP jest ograniczona do 1000 elementów na folder, co skutkuje tworzeniem niekompletnych archiwów bez informowania o tym użytkownika.
 -   [ ] **Brak obsługi dużych plików:** Obecne ograniczenie uploadu do 1 GB i brak mechanizmu "chunked upload" uniemożliwia wgrywanie większych plików i obciąża pamięć RAM serwera.
 -   [ ] **Wysokie zużycie RAM przy archiwizacji:** Mechanizm tworzenia archiwum ZIP zbiera metadane wszystkich plików w pamięci przed rozpoczęciem pakowania, co może prowadzić do problemów z wydajnością przy bardzo dużej liczbie plików.
+-   [ ] **Nieskuteczne unieważnianie sesji dla WebSockets:** Aktywne połączenia WebSocket nie są zamykane, gdy sesja użytkownika wygaśnie lub zostanie zdalnie zakończona (np. przez "wyloguj wszędzie"). Stwarza to lukę bezpieczeństwa, pozwalając na dalsze nasłuchiwanie zdarzeń pomimo unieważnienia sesji.
 
 ### Nowe Funkcje do Implementacji
 
