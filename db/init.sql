@@ -34,8 +34,6 @@ CREATE TABLE nodes (
     modified_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     deleted_at TIMESTAMPTZ,
     original_parent_id VARCHAR(21),
-    
-    CONSTRAINT unique_name_in_parent UNIQUE (owner_id, parent_id, name)
 );
 
 CREATE UNIQUE INDEX unique_name_in_folder ON nodes (owner_id, parent_id, name) WHERE parent_id IS NOT NULL;
