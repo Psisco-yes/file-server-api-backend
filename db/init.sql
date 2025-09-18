@@ -33,7 +33,7 @@ CREATE TABLE nodes (
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     modified_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     deleted_at TIMESTAMPTZ,
-    original_parent_id VARCHAR(21),
+    original_parent_id VARCHAR(21)
 );
 
 CREATE UNIQUE INDEX unique_name_in_folder ON nodes (owner_id, parent_id, name) WHERE parent_id IS NOT NULL;
