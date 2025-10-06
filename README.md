@@ -237,4 +237,4 @@ Lista zidentyfikowanych problemów i planowanych do wdrożenia funkcjonalności.
 -   [ ] **Kopiowanie Plików i Folderów:** Dodanie możliwości tworzenia kopii plików i całych struktur folderów.
 -   [ ] **Wyszukiwarka Plików:** Zaimplementowanie endpointu pozwalającego na wyszukiwanie plików i folderów po nazwie w całej dostępnej przestrzeni użytkownika (własne i udostępnione).
 -   [ ] **Dziennik Audytowy (Audit Log):** Stworzenie oddzielnego, niezmiennego dziennika zdarzeń związanych z bezpieczeństwem (logowanie, dostęp do plików, zmiany uprawnień) w celu zapewnienia rozliczalności i zgodności z RODO.
--   [ ] **Większa personalizacja** Stworzenie dodatkowych endpointów do np. zmiany wyświetlanej nazwy konta.
+-   [ ] **Większa personalizacja:** Stworzenie dodatkowych endpointów do np. zmiany wyświetlanej nazwy konta.
