@@ -800,14 +800,26 @@ func (s *Server) DownloadArchiveHandler(w http.ResponseWriter, r *http.Request) 
 		nodePaths[node.ID] = fullPath
 
 		if node.NodeType == "folder" {
-			children, err := s.store.GetNodesByParentID(r.Context(), claims.UserID, &node.ID, MaxLimit, 0) // TODO: unlimited limit for zipping
-			if err != nil {
-				return fmt.Errorf("could not list children of folder %s: %w", node.Name, err)
-			}
-			for _, child := range children {
-				if err := collectNodes(child.ID, fullPath); err != nil {
-					return err
+			var offset int = 0
+			var limit int = MaxLimit
+
+			for {
+				children, err := s.store.GetNodesByParentID(r.Context(), claims.UserID, &node.ID, limit, offset)
+				if err != nil {
+					return fmt.Errorf("could not list children of folder %s: %w", node.Name, err)
 				}
+
+				for _, child := range children {
+					if err := collectNodes(child.ID, fullPath); err != nil {
+						return err
+					}
+				}
+
+				if len(children) < limit {
+					break
+				}
+
+				offset += limit
 			}
 		}
 		return nil

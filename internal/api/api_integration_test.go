@@ -777,3 +777,50 @@ func TestDownloadArchiveHandler(t *testing.T) {
 	require.True(t, foundFiles["plik2.txt"], "Expected to find root file plik2.txt")
 	require.Len(t, foundFiles, 3, "Archive should contain exactly 3 entries")
 }
+
+func TestDownloadArchiveHandler_LargeFolder(t *testing.T) {
+	username := "user_for_zip_test"
+	password := "password123"
+	testUser := createTestUserWithPassword(t, username, password)
+
+	t.Cleanup(func() {
+		testServer.store.GetPool().Exec(context.Background(), "DELETE FROM users WHERE id = $1", testUser.ID)
+	})
+
+	loginResp := loginUserForTest(t, username, password)
+
+	largeFolder := createTestNodeAPI(t, "LargeFolder", "folder", nil, testUser.ID)
+
+	fileCount := 1005
+	fileContent := "test content"
+	for i := 0; i < fileCount; i++ {
+		fileName := fmt.Sprintf("file_%04d.txt", i)
+		fileNode := createTestNodeAPI(t, fileName, "file", &largeFolder.ID, testUser.ID)
+		err := testServer.storage.Save(fileNode.ID, strings.NewReader(fileContent))
+		require.NoError(t, err)
+	}
+
+	url := fmt.Sprintf("/api/v1/nodes/archive?ids=%s", largeFolder.ID)
+	req := httptest.NewRequest("GET", url, nil)
+	req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+	rr := httptest.NewRecorder()
+
+	router := chi.NewRouter()
+	router.With(testServer.AuthMiddleware).Get("/api/v1/nodes/archive", testServer.DownloadArchiveHandler)
+	router.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	zipBody := rr.Body.Bytes()
+	zipReader, err := zip.NewReader(bytes.NewReader(zipBody), int64(len(zipBody)))
+	require.NoError(t, err, "Should be able to read the returned ZIP archive")
+
+	archivedFileCount := 0
+	for _, f := range zipReader.File {
+		if !strings.HasSuffix(f.Name, "/") {
+			archivedFileCount++
+		}
+	}
+
+	require.Equal(t, fileCount, archivedFileCount, "ZIP archive should contain all 1005 files")
+}
