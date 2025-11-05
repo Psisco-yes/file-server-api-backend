@@ -470,14 +470,14 @@ func (q *Queries) GetNodesByParentID(ctx context.Context, ownerID int64, parentI
 	var err error
 
 	if parentID == nil {
-		query = `SELECT id, name, node_type, size_bytes, mime_type, created_at, modified_at 
+		query = `SELECT id, owner_id, name, node_type, size_bytes, mime_type, created_at, modified_at 
 				 FROM nodes 
 				 WHERE owner_id = $1 AND parent_id IS NULL AND deleted_at IS NULL
 				 ORDER BY node_type DESC, name
 				 LIMIT $2 OFFSET $3`
 		rows, err = q.db.Query(ctx, query, ownerID, limit, offset)
 	} else {
-		query = `SELECT id, name, node_type, size_bytes, mime_type, created_at, modified_at 
+		query = `SELECT id, owner_id, name, node_type, size_bytes, mime_type, created_at, modified_at 
 				 FROM nodes 
 				 WHERE owner_id = $1 AND parent_id = $2 AND deleted_at IS NULL
 				 ORDER BY node_type DESC, name
@@ -495,6 +495,7 @@ func (q *Queries) GetNodesByParentID(ctx context.Context, ownerID int64, parentI
 		var node models.Node
 		err := rows.Scan(
 			&node.ID,
+			&node.OwnerID,
 			&node.Name,
 			&node.NodeType,
 			&node.SizeBytes,
@@ -505,6 +506,7 @@ func (q *Queries) GetNodesByParentID(ctx context.Context, ownerID int64, parentI
 		if err != nil {
 			return nil, err
 		}
+		node.OwnerID = ownerID
 		nodes = append(nodes, node)
 	}
 
@@ -807,6 +809,10 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (*mode
 }
 
 func (q *Queries) IsDescendantOf(ctx context.Context, nodeId string, potentialParentId string) (bool, error) {
+	if potentialParentId == "" {
+		return false, nil
+	}
+
 	if nodeId == potentialParentId {
 		return true, nil
 	}
@@ -991,4 +997,51 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (*models.User, erro
 		return nil, err
 	}
 	return &user, nil
+}
+
+func (q *Queries) GetSubtree(ctx context.Context, nodeID string) ([]models.Node, error) {
+	query := `
+		WITH RECURSIVE node_subtree AS (
+			SELECT *
+			FROM nodes
+			WHERE id = $1
+
+			UNION ALL
+
+			SELECT n.*
+			FROM nodes n
+			JOIN node_subtree st ON n.parent_id = st.id
+		)
+		SELECT * FROM node_subtree WHERE id != $1 AND deleted_at IS NULL;
+	`
+
+	rows, err := q.db.Query(ctx, query, nodeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var nodes []models.Node
+
+	for rows.Next() {
+		var node models.Node
+		err := rows.Scan(
+			&node.ID, &node.OwnerID, &node.ParentID, &node.Name, &node.NodeType,
+			&node.SizeBytes, &node.MimeType, &node.CreatedAt, &node.ModifiedAt,
+			&node.DeletedAt, &node.OriginalParentID,
+		)
+		if err != nil {
+			return nil, err
+		}
+		nodes = append(nodes, node)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if nodes == nil {
+		return []models.Node{}, nil
+	}
+	return nodes, nil
 }

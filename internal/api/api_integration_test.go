@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -17,10 +18,11 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
-func createTestNodeAPI(t *testing.T, name, nodeType string, parentID *string, ownerID int64) *models.Node {
+func createTestNodeAPI(t *testing.T, name, nodeType string, parentID *string, ownerID int64) (*models.Node, error) {
 	id, err := testServer.generateUniqueID(context.Background())
 	require.NoError(t, err)
 
@@ -39,8 +41,7 @@ func createTestNodeAPI(t *testing.T, name, nodeType string, parentID *string, ow
 		SizeBytes: sizeBytes,
 	}
 	node, err := testServer.store.CreateNode(context.Background(), params)
-	require.NoError(t, err)
-	return node
+	return node, err
 }
 
 func TestAPI_CreateFolder_Success(t *testing.T) {
@@ -72,7 +73,7 @@ func TestAPI_CreateFolder_EmptyName(t *testing.T) {
 }
 
 func TestAPI_CreateFolder_NameConflict(t *testing.T) {
-	folderName := "Folder_Konfliktowy_Final"
+	folderName := "Folder_Konfliktowy_" + uuid.NewString()
 	createTestNodeAPI(t, folderName, "folder", nil, testUserClaims.UserID)
 
 	var initialCount int
@@ -106,8 +107,10 @@ func TestAPI_CreateFolder_NameConflict(t *testing.T) {
 }
 
 func TestListNodesHandler(t *testing.T) {
-	parentFolder := createTestNodeAPI(t, "Parent Folder", "folder", nil, testUserClaims.UserID)
-	childFile := createTestNodeAPI(t, "Child File", "file", &parentFolder.ID, testUserClaims.UserID)
+	parentFolder, err := createTestNodeAPI(t, "Parent Folder", "folder", nil, testUserClaims.UserID)
+	require.NoError(t, err)
+	childFile, err := createTestNodeAPI(t, "Child File", "file", &parentFolder.ID, testUserClaims.UserID)
+	require.NoError(t, err)
 
 	t.Run("should list root directory", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/v1/nodes", nil)
@@ -149,7 +152,8 @@ func TestListNodesHandler(t *testing.T) {
 }
 
 func TestUpdateNodeHandler_Rename(t *testing.T) {
-	nodeToRename := createTestNodeAPI(t, "Stara Nazwa", "folder", nil, testUserClaims.UserID)
+	nodeToRename, err := createTestNodeAPI(t, "Stara Nazwa", "folder", nil, testUserClaims.UserID)
+	require.NoError(t, err)
 
 	payload := UpdateNodeRequest{Name: new(string)}
 	*payload.Name = "Nowa Nazwa"
@@ -171,9 +175,12 @@ func TestUpdateNodeHandler_Rename(t *testing.T) {
 }
 
 func TestUpdateNodeHandler_Move(t *testing.T) {
-	folder1 := createTestNodeAPI(t, "Folder 1", "folder", nil, testUserClaims.UserID)
-	folder2 := createTestNodeAPI(t, "Folder 2", "folder", nil, testUserClaims.UserID)
-	nodeToMove := createTestNodeAPI(t, "Plik do przeniesienia", "file", &folder1.ID, testUserClaims.UserID)
+	folder1, err := createTestNodeAPI(t, "Folder 1", "folder", nil, testUserClaims.UserID)
+	require.NoError(t, err)
+	folder2, err := createTestNodeAPI(t, "Folder 2", "folder", nil, testUserClaims.UserID)
+	require.NoError(t, err)
+	nodeToMove, err := createTestNodeAPI(t, "Plik do przeniesienia", "file", &folder1.ID, testUserClaims.UserID)
+	require.NoError(t, err)
 
 	payload := UpdateNodeRequest{ParentID: &folder2.ID}
 	body, _ := json.Marshal(payload)
@@ -195,7 +202,8 @@ func TestUpdateNodeHandler_Move(t *testing.T) {
 }
 
 func TestDeleteNodeHandler(t *testing.T) {
-	nodeToDelete := createTestNodeAPI(t, "Do Kosza", "file", nil, testUserClaims.UserID)
+	nodeToDelete, err := createTestNodeAPI(t, "Do Kosza", "file", nil, testUserClaims.UserID)
+	require.NoError(t, err)
 
 	url := fmt.Sprintf("/api/v1/nodes/%s", nodeToDelete.ID)
 	req := httptest.NewRequest("DELETE", url, nil)
@@ -250,9 +258,10 @@ func TestUploadFileHandler(t *testing.T) {
 }
 
 func TestDownloadFileHandler(t *testing.T) {
-	fileNode := createTestNodeAPI(t, "plik_do_pobrania.txt", "file", nil, testUserClaims.UserID)
+	fileNode, err := createTestNodeAPI(t, "plik_do_pobrania.txt", "file", nil, testUserClaims.UserID)
+	require.NoError(t, err)
 	fileContent := "tajna zawartość"
-	err := testServer.storage.Save(fileNode.ID, strings.NewReader(fileContent))
+	err = testServer.storage.Save(fileNode.ID, strings.NewReader(fileContent))
 	require.NoError(t, err)
 
 	url := fmt.Sprintf("/api/v1/nodes/%s/download", fileNode.ID)
@@ -427,7 +436,8 @@ func TestShareAndFavorite_Integration(t *testing.T) {
 	sharerLogin := loginUserForTest(t, "sharer_user_fav", "password")
 	recipientLogin := loginUserForTest(t, "recipient_user_fav", "password")
 
-	nodeToShare := createTestNodeAPI(t, "plik_do_udostepnienia_fav.txt", "file", nil, sharer.ID)
+	nodeToShare, err := createTestNodeAPI(t, "plik_do_udostepnienia_fav.txt", "file", nil, sharer.ID)
+	require.NoError(t, err)
 
 	var shareID int64
 
@@ -536,8 +546,10 @@ func TestTrashHandlers_Integration(t *testing.T) {
 	testUser := createTestUserWithPassword(t, username, password)
 	loginResp := loginUserForTest(t, username, password)
 
-	nodeToTrash := createTestNodeAPI(t, "plik_do_kosza.txt", "file", nil, testUser.ID)
-	nodeToKeep := createTestNodeAPI(t, "plik_zostaje.txt", "file", nil, testUser.ID)
+	nodeToTrash, err := createTestNodeAPI(t, "plik_do_kosza.txt", "file", nil, testUser.ID)
+	require.NoError(t, err)
+	nodeToKeep, err := createTestNodeAPI(t, "plik_zostaje.txt", "file", nil, testUser.ID)
+	require.NoError(t, err)
 
 	router := chi.NewRouter()
 	router.Use(testServer.AuthMiddleware)
@@ -741,12 +753,15 @@ func TestDownloadArchiveHandler(t *testing.T) {
 	user := createTestUserWithPassword(t, "archive_user", "password")
 	loginResp := loginUserForTest(t, "archive_user", "password")
 
-	folder1 := createTestNodeAPI(t, "Folder_A", "folder", nil, user.ID)
-	file1 := createTestNodeAPI(t, "plik1.txt", "file", &folder1.ID, user.ID)
-	err := testServer.storage.Save(file1.ID, strings.NewReader("content1"))
+	folder1, err := createTestNodeAPI(t, "Folder_A", "folder", nil, user.ID)
+	require.NoError(t, err)
+	file1, err := createTestNodeAPI(t, "plik1.txt", "file", &folder1.ID, user.ID)
+	require.NoError(t, err)
+	err = testServer.storage.Save(file1.ID, strings.NewReader("content1"))
 	require.NoError(t, err)
 
-	file2 := createTestNodeAPI(t, "plik2.txt", "file", nil, user.ID)
+	file2, err := createTestNodeAPI(t, "plik2.txt", "file", nil, user.ID)
+	require.NoError(t, err)
 	err = testServer.storage.Save(file2.ID, strings.NewReader("content2"))
 	require.NoError(t, err)
 
@@ -789,14 +804,16 @@ func TestDownloadArchiveHandler_LargeFolder(t *testing.T) {
 
 	loginResp := loginUserForTest(t, username, password)
 
-	largeFolder := createTestNodeAPI(t, "LargeFolder", "folder", nil, testUser.ID)
+	largeFolder, err := createTestNodeAPI(t, "LargeFolder", "folder", nil, testUser.ID)
+	require.NoError(t, err)
 
 	fileCount := 1005
 	fileContent := "test content"
 	for i := 0; i < fileCount; i++ {
 		fileName := fmt.Sprintf("file_%04d.txt", i)
-		fileNode := createTestNodeAPI(t, fileName, "file", &largeFolder.ID, testUser.ID)
-		err := testServer.storage.Save(fileNode.ID, strings.NewReader(fileContent))
+		fileNode, err := createTestNodeAPI(t, fileName, "file", &largeFolder.ID, testUser.ID)
+		require.NoError(t, err)
+		err = testServer.storage.Save(fileNode.ID, strings.NewReader(fileContent))
 		require.NoError(t, err)
 	}
 
@@ -823,4 +840,98 @@ func TestDownloadArchiveHandler_LargeFolder(t *testing.T) {
 	}
 
 	require.Equal(t, fileCount, archivedFileCount, "ZIP archive should contain all 1005 files")
+}
+
+func TestCopyNodeHandler_Integration(t *testing.T) {
+	router := chi.NewRouter()
+	router.Use(testServer.AuthMiddleware)
+	router.Post("/api/v1/nodes/{nodeId}/copy", testServer.CopyNodeHandler)
+
+	t.Run("successful file copy", func(t *testing.T) {
+		user := createTestUserWithPassword(t, "user_copy_success", "password")
+		loginResp := loginUserForTest(t, "user_copy_success", "password")
+		sourceFile, err := createTestNodeAPI(t, "file_to_copy.txt", "file", nil, user.ID)
+		require.NoError(t, err)
+		targetFolder, err := createTestNodeAPI(t, "target_folder", "folder", nil, user.ID)
+		require.NoError(t, err)
+		sourceContent := "oryginalna zawartość"
+		err = testServer.storage.Save(sourceFile.ID, strings.NewReader(sourceContent))
+		require.NoError(t, err)
+
+		copyReq := CopyNodeRequest{ParentID: targetFolder.ID}
+		body, _ := json.Marshal(copyReq)
+		url := fmt.Sprintf("/api/v1/nodes/%s/copy", sourceFile.ID)
+		req := httptest.NewRequest("POST", url, bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusCreated, rr.Code)
+		var copiedNode models.Node
+		json.Unmarshal(rr.Body.Bytes(), &copiedNode)
+		require.Equal(t, sourceFile.Name, copiedNode.Name)
+		require.Equal(t, targetFolder.ID, *copiedNode.ParentID)
+	})
+
+	t.Run("copy with name conflict", func(t *testing.T) {
+		user := createTestUserWithPassword(t, "user_copy_conflict", "password")
+		loginResp := loginUserForTest(t, "user_copy_conflict", "password")
+		sourceFile, err := createTestNodeAPI(t, "file_with_conflict.txt", "file", nil, user.ID)
+		require.NoError(t, err)
+		targetFolder, err := createTestNodeAPI(t, "target_folder_conflict", "folder", nil, user.ID)
+		require.NoError(t, err)
+		_, err = createTestNodeAPI(t, "file_with_conflict.txt", "file", &targetFolder.ID, user.ID)
+		require.NoError(t, err)
+
+		copyReq := CopyNodeRequest{ParentID: targetFolder.ID}
+		body, _ := json.Marshal(copyReq)
+		url := fmt.Sprintf("/api/v1/nodes/%s/copy", sourceFile.ID)
+		req := httptest.NewRequest("POST", url, bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusConflict, rr.Code)
+	})
+
+	t.Run("copy folder recursively with new name", func(t *testing.T) {
+		user := createTestUserWithPassword(t, "user_copy_recursive_rename", "password")
+		loginResp := loginUserForTest(t, "user_copy_recursive_rename", "password")
+		sourceFolder, err := createTestNodeAPI(t, "SourceFolderRecursive", "folder", nil, user.ID)
+		require.NoError(t, err)
+
+		innerFile, err := createTestNodeAPI(t, "wewnetrzny.txt", "file", &sourceFolder.ID, user.ID)
+		require.NoError(t, err)
+
+		sourceContent := "to jest treść pliku testowego"
+		err = testServer.storage.Save(innerFile.ID, strings.NewReader(sourceContent))
+		require.NoError(t, err, "Failed to save content for the source file")
+
+		newName := "CopiedSourceFolder"
+		copyReq := CopyNodeRequest{ParentID: "root", NewName: &newName}
+		body, _ := json.Marshal(copyReq)
+		url := fmt.Sprintf("/api/v1/nodes/%s/copy", sourceFolder.ID)
+		req := httptest.NewRequest("POST", url, bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusCreated, rr.Code)
+
+		var copiedFolder models.Node
+		json.Unmarshal(rr.Body.Bytes(), &copiedFolder)
+		require.Equal(t, newName, copiedFolder.Name)
+
+		children, err := testServer.store.GetNodesByParentID(context.Background(), user.ID, &copiedFolder.ID, 10, 0)
+		require.NoError(t, err)
+		require.Len(t, children, 1)
+		require.Equal(t, "wewnetrzny.txt", children[0].Name)
+
+		copiedFileContent, err := testServer.storage.Get(children[0].ID)
+		require.NoError(t, err)
+		defer copiedFileContent.Close()
+		contentBytes, err := io.ReadAll(copiedFileContent)
+		require.NoError(t, err)
+		require.Equal(t, sourceContent, string(contentBytes))
+	})
 }

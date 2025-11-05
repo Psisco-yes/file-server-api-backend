@@ -93,3 +93,46 @@ func TestLocalStorage_SaveWithLargeData(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(len(largeContent)), fileInfo.Size())
 }
+
+func TestLocalStorage_Copy(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "storage-copy-test")
+	require.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	storage, err := NewLocalStorage(tempDir)
+	require.NoError(t, err)
+
+	sourceID := "source_file_id_123"
+	destID := "dest_file_id_456"
+	fileContent := "to jest test kopiowania"
+
+	err = storage.Save(sourceID, strings.NewReader(fileContent))
+	require.NoError(t, err)
+
+	err = storage.Copy(sourceID, destID)
+
+	require.NoError(t, err)
+
+	destPath := storage.getPathFromID(destID)
+
+	_, err = os.Stat(destPath)
+	require.NoError(t, err, "Destination file should exist after copy")
+
+	copiedContent, err := os.ReadFile(destPath)
+	require.NoError(t, err)
+	require.Equal(t, fileContent, string(copiedContent))
+}
+
+func TestLocalStorage_Copy_SourceNotFound(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "storage-copy-test-notfound")
+	require.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	storage, err := NewLocalStorage(tempDir)
+	require.NoError(t, err)
+
+	err = storage.Copy("non_existent_source", "any_destination")
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "source file for copy not found")
+}

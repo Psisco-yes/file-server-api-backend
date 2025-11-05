@@ -647,12 +647,9 @@ func (s *Server) UpdateNodeHandler(w http.ResponseWriter, r *http.Request) {
 			newParentID = &newParentIDStr
 		}
 
-		var destParentNode *models.Node
 		var destOwnerID int64 = claims.UserID
-
 		if newParentID != nil {
-			var err error
-			destParentNode, err = s.store.GetNodeIfAccessible(r.Context(), *newParentID, claims.UserID)
+			destParentNode, err := s.store.GetNodeIfAccessible(r.Context(), *newParentID, claims.UserID)
 			if err != nil || destParentNode == nil {
 				http.Error(w, "Target folder not found or access denied", http.StatusNotFound)
 				return
@@ -858,4 +855,219 @@ func (s *Server) DownloadArchiveHandler(w http.ResponseWriter, r *http.Request) 
 			fileStream.Close()
 		}
 	}
+}
+
+type CopyNodeRequest struct {
+	ParentID string  `json:"parent_id" example:"target_folder_id"`
+	NewName  *string `json:"new_name,omitempty" example:"Kopia Raportu"`
+}
+
+// @Summary      Copy a node
+// @Description  Creates a deep copy of a file or folder (and its contents) to a new location. By default, the copy retains the original name. If a node with the same name already exists in the target location, a 409 Conflict error is returned. An optional 'new_name' can be provided for the top-level copied node. The new node inherits the owner of the target folder. Use "root" for the target ParentID.
+// @Tags         nodes
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        nodeId        path      string           true  "Node ID of the file/folder to copy"
+// @Param        copyRequest   body      CopyNodeRequest  true  "Target parent folder and optional new name"
+// @Success      201           {object}  NodeResponse
+// @Failure      400           {string}  string "Bad Request"
+// @Failure      401           {string}  string "Unauthorized"
+// @Failure      403           {string}  string "Forbidden - Write permission denied"
+// @Failure      404           {string}  string "Not Found - Source or destination not found"
+// @Failure      409           {string}  string "Conflict - A node with the same name already exists in the target location"
+// @Failure      413           {string}  string "Payload Too Large - Not enough storage space"
+// @Failure      500           {string}  string "Internal Server Error"
+// @Router       /nodes/{nodeId}/copy [post]
+func (s *Server) CopyNodeHandler(w http.ResponseWriter, r *http.Request) {
+	claims := GetUserFromContext(r.Context())
+	sourceNodeID := chi.URLParam(r, "nodeId")
+
+	var req CopyNodeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	sourceNode, err := s.store.GetNodeIfAccessible(r.Context(), sourceNodeID, claims.UserID)
+	if err != nil || sourceNode == nil {
+		http.Error(w, "Source node not found or access denied", http.StatusNotFound)
+		return
+	}
+
+	newParentIDStr := req.ParentID
+	var newParentID *string
+	if newParentIDStr != "root" {
+		if len(newParentIDStr) != 21 {
+			http.Error(w, "Invalid ParentID format", http.StatusBadRequest)
+			return
+		}
+		newParentID = &newParentIDStr
+	}
+
+	hasPermission, err := s.store.CheckWritePermission(r.Context(), claims.UserID, newParentID)
+	if err != nil || !hasPermission {
+		http.Error(w, "You do not have permission to copy items into this folder", http.StatusForbidden)
+		return
+	}
+
+	var destOwnerID int64 = claims.UserID
+	if newParentID != nil {
+		destParentNode, err := s.store.GetNodeIfAccessible(r.Context(), *newParentID, claims.UserID)
+		if err != nil || destParentNode == nil {
+			http.Error(w, "Target folder not found or access denied", http.StatusNotFound)
+			return
+		}
+		destOwnerID = destParentNode.OwnerID
+	}
+
+	var totalCopySize int64 = 0
+	if sourceNode.NodeType == "file" {
+		if sourceNode.SizeBytes != nil {
+			totalCopySize = *sourceNode.SizeBytes
+		}
+	} else {
+		subtree, err := s.store.GetSubtree(r.Context(), sourceNodeID)
+		if err != nil {
+			http.Error(w, "Failed to calculate copy size", http.StatusInternalServerError)
+			return
+		}
+		if sourceNode.NodeType == "file" && sourceNode.SizeBytes != nil {
+			totalCopySize += *sourceNode.SizeBytes
+		}
+		for _, node := range subtree {
+			if node.NodeType == "file" && node.SizeBytes != nil {
+				totalCopySize += *node.SizeBytes
+			}
+		}
+	}
+
+	destOwner, err := s.store.GetUserByID(r.Context(), destOwnerID)
+	if err != nil || destOwner == nil {
+		http.Error(w, "Could not verify destination owner", http.StatusInternalServerError)
+		return
+	}
+
+	if destOwner.StorageUsedBytes+totalCopySize > destOwner.StorageQuotaBytes {
+		http.Error(w, "Not enough storage space in the destination.", http.StatusRequestEntityTooLarge)
+		return
+	}
+
+	var copiedRootNode *models.Node
+	var allCopiedNodes []*models.Node
+	var filesToCleanUp []string
+
+	txErr := s.store.ExecTx(r.Context(), func(q *database.Queries) error {
+		var totalBytesCopied int64 = 0
+
+		var copyRecursively func(nodeToCopy models.Node, targetParentID *string) (*models.Node, error)
+		copyRecursively = func(nodeToCopy models.Node, targetParentID *string) (*models.Node, error) {
+			newID, txErr := s.generateUniqueID(r.Context())
+			if txErr != nil {
+				return nil, txErr
+			}
+
+			params := database.CreateNodeParams{
+				ID:        newID,
+				OwnerID:   destOwnerID,
+				ParentID:  targetParentID,
+				Name:      nodeToCopy.Name,
+				NodeType:  nodeToCopy.NodeType,
+				SizeBytes: nodeToCopy.SizeBytes,
+				MimeType:  nodeToCopy.MimeType,
+			}
+
+			if nodeToCopy.ID == sourceNodeID && req.NewName != nil {
+				params.Name = *req.NewName
+			}
+
+			newNode, txErr := q.CreateNode(r.Context(), params)
+			if txErr != nil {
+				var pgErr *pgconn.PgError
+				if errors.As(txErr, &pgErr) && pgErr.Code == "23505" {
+					return nil, fmt.Errorf("a node named '%s' already exists in the target location: %w", params.Name, database.ErrDuplicateNodeName)
+				}
+				return nil, txErr
+			}
+
+			allCopiedNodes = append(allCopiedNodes, newNode)
+
+			if newNode.NodeType == "file" {
+				if txErr := s.storage.Copy(nodeToCopy.ID, newNode.ID); txErr != nil {
+					return nil, txErr
+				}
+				filesToCleanUp = append(filesToCleanUp, newNode.ID)
+				if newNode.SizeBytes != nil {
+					totalBytesCopied += *newNode.SizeBytes
+				}
+			}
+
+			if nodeToCopy.NodeType == "folder" {
+				children, err := q.GetNodesByParentID(r.Context(), nodeToCopy.OwnerID, &nodeToCopy.ID, 10000, 0)
+				if err != nil {
+					return nil, err
+				}
+
+				for _, child := range children {
+					if _, err := copyRecursively(child, &newNode.ID); err != nil {
+						return nil, err
+					}
+				}
+			}
+			return newNode, nil
+		}
+
+		var txErr error
+		copiedRootNode, txErr = copyRecursively(*sourceNode, newParentID)
+		if txErr != nil {
+			return txErr
+		}
+
+		if totalBytesCopied > 0 {
+			if txErr := q.UpdateUserStorage(r.Context(), destOwnerID, totalBytesCopied); txErr != nil {
+				return txErr
+			}
+		}
+
+		for _, copiedNode := range allCopiedNodes {
+			if err := q.LogEvent(r.Context(), claims.UserID, "node_copied", copiedNode); err != nil {
+				return err
+			}
+			if claims.UserID != destOwnerID {
+				if err := q.LogEvent(r.Context(), destOwnerID, "node_copied", copiedNode); err != nil {
+					return err
+				}
+			}
+		}
+
+		return nil
+	})
+
+	if txErr != nil {
+		for _, fileID := range filesToCleanUp {
+			s.storage.Delete(fileID)
+		}
+		if errors.Is(txErr, database.ErrDuplicateNodeName) {
+			http.Error(w, txErr.Error(), http.StatusConflict)
+			return
+		}
+		http.Error(w, fmt.Sprintf("Failed to complete copy operation: %v", txErr), http.StatusInternalServerError)
+		return
+	}
+
+	for _, copiedNode := range allCopiedNodes {
+		eventMsg := map[string]interface{}{"event_type": "node_copied", "payload": copiedNode}
+		eventBytes, err := json.Marshal(eventMsg)
+		if err != nil {
+			log.Printf("CRITICAL: Failed to marshal WebSocket event for copied node %s: %v", copiedNode.ID, err)
+			continue
+		}
+		s.wsHub.PublishEvent(claims.UserID, eventBytes)
+		if claims.UserID != destOwnerID {
+			s.wsHub.PublishEvent(destOwnerID, eventBytes)
+		}
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(copiedRootNode)
 }

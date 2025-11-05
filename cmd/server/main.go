@@ -115,6 +115,7 @@ func main() {
 					r.Post("/favorite", server.AddFavoriteHandler)
 					r.Delete("/favorite", server.RemoveFavoriteHandler)
 					r.Post("/share", server.ShareNodeHandler)
+					r.Post("/copy", server.CopyNodeHandler)
 				})
 			})
 

@@ -66,3 +66,32 @@ func (ls *LocalStorage) Delete(id string) error {
 
 	return err
 }
+
+func (ls *LocalStorage) Copy(sourceID string, destID string) error {
+	sourcePath := ls.getPathFromID(sourceID)
+	sourceFile, err := os.Open(sourcePath)
+	if err != nil {
+		return fmt.Errorf("source file for copy not found: %w", err)
+	}
+	defer sourceFile.Close()
+
+	destPath := ls.getPathFromID(destID)
+	destDir := filepath.Dir(destPath)
+
+	if err := os.MkdirAll(destDir, os.ModePerm); err != nil {
+		return fmt.Errorf("could not create destination directory for copy: %w", err)
+	}
+
+	destFile, err := os.Create(destPath)
+	if err != nil {
+		return fmt.Errorf("could not create destination file for copy: %w", err)
+	}
+	defer destFile.Close()
+
+	_, err = io.Copy(destFile, sourceFile)
+	if err != nil {
+		return fmt.Errorf("failed to copy file content: %w", err)
+	}
+
+	return nil
+}
