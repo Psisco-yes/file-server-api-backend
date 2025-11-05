@@ -773,11 +773,13 @@ func TestDeleteSessionByID(t *testing.T) {
 	err = testStore.CreateSession(context.Background(), CreateSessionParams{ID: otherUserSessionID, UserID: otherUser.ID, RefreshToken: "other_user_session", ExpiresAt: time.Now().Add(time.Hour)})
 	require.NoError(t, err)
 
-	err = testStore.DeleteSessionByID(context.Background(), otherUserSessionID, user.ID)
+	success, err := testStore.DeleteSessionByID(context.Background(), otherUserSessionID, user.ID)
 	require.NoError(t, err)
+	require.False(t, success, "Should not be able to delete another user's session")
 
-	err = testStore.DeleteSessionByID(context.Background(), sessionIDToDelete, user.ID)
+	success, err = testStore.DeleteSessionByID(context.Background(), sessionIDToDelete, user.ID)
 	require.NoError(t, err)
+	require.True(t, success, "Should successfully delete own session")
 
 	sessions, err := testStore.ListSessionsForUser(context.Background(), user.ID)
 	require.NoError(t, err)

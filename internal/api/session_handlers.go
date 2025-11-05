@@ -11,7 +11,7 @@ import (
 )
 
 // @Summary      List active sessions
-// @Description  Gets a list of all active sessions for the currently authenticated user, which can be displayed to allow them to manage devices.
+// @Description  Gets a list of all active sessions for the currently authenticated user. This can be used to display a list of devices where the user is logged in.
 // @Tags         sessions
 // @Produce      json
 // @Security     BearerAuth
@@ -33,7 +33,7 @@ func (s *Server) ListSessionsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary      Terminate a specific session
-// @Description  Terminates (logs out) a specific session by its ID. A user can only terminate their own sessions.
+// @Description  Terminates (logs out) a specific session by its ID. A user can only terminate their own sessions. This will also close any active WebSocket connections associated with the terminated user.
 // @Tags         sessions
 // @Security     BearerAuth
 // @Param        sessionId  path      string  true  "ID of the session to terminate" format(uuid)
@@ -52,17 +52,21 @@ func (s *Server) DeleteSessionHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = s.store.DeleteSessionByID(r.Context(), sessionID, claims.UserID)
+	success, err := s.store.DeleteSessionByID(r.Context(), sessionID, claims.UserID)
 	if err != nil {
 		http.Error(w, "Failed to delete session", http.StatusInternalServerError)
 		return
+	}
+
+	if success {
+		s.wsHub.DisconnectUser <- claims.UserID
 	}
 
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // @Summary      Terminate all sessions (Log out everywhere)
-// @Description  Terminates all active sessions for the currently authenticated user, effectively logging them out from all other devices.
+// @Description  Terminates all active sessions for the currently authenticated user, effectively logging them out from all devices. This will also close all active WebSocket connections for the user.
 // @Tags         sessions
 // @Security     BearerAuth
 // @Success      204  {null}    nil "No Content"
@@ -77,6 +81,8 @@ func (s *Server) TerminateAllSessionsHandler(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "Failed to terminate all sessions", http.StatusInternalServerError)
 		return
 	}
+
+	s.wsHub.DisconnectUser <- claims.UserID
 
 	w.WriteHeader(http.StatusNoContent)
 }

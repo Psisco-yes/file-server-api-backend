@@ -912,10 +912,13 @@ func (q *Queries) ListSessionsForUser(ctx context.Context, userID int64) ([]mode
 	return sessions, nil
 }
 
-func (q *Queries) DeleteSessionByID(ctx context.Context, sessionID uuid.UUID, userID int64) error {
+func (q *Queries) DeleteSessionByID(ctx context.Context, sessionID uuid.UUID, userID int64) (bool, error) {
 	query := `DELETE FROM sessions WHERE id = $1 AND user_id = $2`
-	_, err := q.db.Exec(ctx, query, sessionID, userID)
-	return err
+	res, err := q.db.Exec(ctx, query, sessionID, userID)
+	if err != nil {
+		return false, err
+	}
+	return res.RowsAffected() > 0, nil
 }
 
 func (q *Queries) DeleteAllSessionsForUser(ctx context.Context, userID int64) error {

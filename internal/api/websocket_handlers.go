@@ -5,12 +5,20 @@ import (
 	"net/http"
 	"serwer-plikow/internal/auth"
 	"serwer-plikow/internal/websocket"
+
+	ws "github.com/gorilla/websocket"
 )
 
+var upgrader = ws.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+	CheckOrigin:     func(r *http.Request) bool { return true },
+}
+
 // @Summary      Establish WebSocket connection
-// @Description  Upgrades the HTTP connection to a WebSocket connection for real-time event notifications. The authentication token must be provided as a query parameter.
-// @Tags         websockets
-// @Param        token  query     string  true  "JWT authentication token"
+// @Description  Upgrades an HTTP connection to a WebSocket connection for real-time updates. The access token must be provided as a query parameter.
+// @Tags         websocket
+// @Param        token  query     string  true  "JWT Access Token"
 // @Success      101    {string}  string  "Switching Protocols"
 // @Failure      401    {string}  string  "Unauthorized - Invalid or missing token"
 // @Router       /ws [get]
@@ -27,7 +35,7 @@ func (s *Server) ServeWsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conn, err := websocket.Upgrader.Upgrade(w, r, nil)
+	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println("WebSocket upgrade error:", err)
 		return

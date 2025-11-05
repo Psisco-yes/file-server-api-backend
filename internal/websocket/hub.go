@@ -2,32 +2,23 @@ package websocket
 
 import (
 	"log"
-	"net/http"
 	"sync"
-
-	"github.com/gorilla/websocket"
 )
 
-var Upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin:     func(r *http.Request) bool { return true },
-}
-
 type Hub struct {
-	clients    map[int64]map[*Client]bool
-	mu         sync.RWMutex
-	Register   chan *Client
-	Unregister chan *Client
-	Broadcast  chan []byte
+	clients        map[int64]map[*Client]bool
+	mu             sync.RWMutex
+	Register       chan *Client
+	Unregister     chan *Client
+	DisconnectUser chan int64
 }
 
 func NewHub() *Hub {
 	return &Hub{
-		clients:    make(map[int64]map[*Client]bool),
-		Register:   make(chan *Client),
-		Unregister: make(chan *Client),
-		Broadcast:  make(chan []byte),
+		clients:        make(map[int64]map[*Client]bool),
+		Register:       make(chan *Client),
+		Unregister:     make(chan *Client),
+		DisconnectUser: make(chan int64),
 	}
 }
 
@@ -38,6 +29,8 @@ func (h *Hub) Run() {
 			h.registerClient(client)
 		case client := <-h.Unregister:
 			h.unregisterClient(client)
+		case userID := <-h.DisconnectUser:
+			h.disconnectUser(userID)
 		}
 	}
 }
@@ -49,7 +42,7 @@ func (h *Hub) registerClient(client *Client) {
 		h.clients[client.UserID] = make(map[*Client]bool)
 	}
 	h.clients[client.UserID][client] = true
-	log.Printf("Client for user %d registered", client.UserID)
+	log.Printf("Hub: Client for user %d registered", client.UserID)
 }
 
 func (h *Hub) unregisterClient(client *Client) {
@@ -62,8 +55,21 @@ func (h *Hub) unregisterClient(client *Client) {
 			if len(userClients) == 0 {
 				delete(h.clients, client.UserID)
 			}
-			log.Printf("Client for user %d unregistered", client.UserID)
+			log.Printf("Hub: Client for user %d unregistered", client.UserID)
 		}
+	}
+}
+
+func (h *Hub) disconnectUser(userID int64) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if userClients, ok := h.clients[userID]; ok {
+		log.Printf("Hub: Disconnecting all %d clients for user %d", len(userClients), userID)
+		for client := range userClients {
+			close(client.send)
+		}
+		delete(h.clients, userID)
 	}
 }
 
