@@ -708,11 +708,13 @@ func TestUserHandlers_Integration(t *testing.T) {
 		router.ServeHTTP(rr, req)
 
 		require.Equal(t, http.StatusOK, rr.Code)
-		var claims auth.AppClaims
-		err := json.Unmarshal(rr.Body.Bytes(), &claims)
+
+		var returnedUser models.User
+		err := json.Unmarshal(rr.Body.Bytes(), &returnedUser)
 		require.NoError(t, err)
-		require.Equal(t, user.ID, claims.UserID)
-		require.Equal(t, user.Username, claims.Username)
+
+		require.Equal(t, user.ID, returnedUser.ID)
+		require.Equal(t, user.Username, returnedUser.Username)
 	})
 
 	t.Run("get storage usage", func(t *testing.T) {
@@ -933,5 +935,92 @@ func TestCopyNodeHandler_Integration(t *testing.T) {
 		contentBytes, err := io.ReadAll(copiedFileContent)
 		require.NoError(t, err)
 		require.Equal(t, sourceContent, string(contentBytes))
+	})
+}
+
+func TestSearchHandler_Integration(t *testing.T) {
+	userA := createTestUserWithPassword(t, "user_search_a", "password")
+	userB := createTestUserWithPassword(t, "user_search_b", "password")
+
+	loginA := loginUserForTest(t, "user_search_a", "password")
+
+	createTestNodeAPI(t, "Raport Roczny A.pdf", "file", nil, userA.ID)
+	createTestNodeAPI(t, "Projekt Tajny A", "folder", nil, userA.ID)
+	createTestNodeAPI(t, "Notatki B.txt", "file", nil, userB.ID)
+	sharedWithA, _ := createTestNodeAPI(t, "Raport Wspólny B.docx", "file", nil, userB.ID)
+
+	_, err := testServer.store.ShareNode(context.Background(), database.ShareNodeParams{
+		NodeID:      sharedWithA.ID,
+		SharerID:    userB.ID,
+		RecipientID: userA.ID,
+		Permissions: "read",
+	})
+	require.NoError(t, err)
+
+	router := chi.NewRouter()
+	router.Use(testServer.AuthMiddleware)
+	router.Get("/api/v1/search", testServer.SearchHandler)
+
+	t.Run("search finds own and shared files", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/v1/search?q=Raport", nil)
+		req.Header.Set("Authorization", "Bearer "+loginA.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusOK, rr.Code)
+		var results []models.Node
+		json.Unmarshal(rr.Body.Bytes(), &results)
+
+		require.Len(t, results, 2, "Should find two reports: own and shared")
+
+		foundNames := []string{results[0].Name, results[1].Name}
+		require.Contains(t, foundNames, "Raport Roczny A.pdf")
+		require.Contains(t, foundNames, "Raport Wspólny B.docx")
+	})
+
+	t.Run("search does not find other users private files", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/v1/search?q=Notatki", nil)
+		req.Header.Set("Authorization", "Bearer "+loginA.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusOK, rr.Code)
+		var results []models.Node
+		json.Unmarshal(rr.Body.Bytes(), &results)
+		require.Len(t, results, 0, "Should not find private files of other users")
+	})
+}
+
+func TestUpdateCurrentUserHandler_Integration(t *testing.T) {
+	username := "user_update_me"
+	password := "password123"
+	testUser := createTestUserWithPassword(t, username, password)
+	loginResp := loginUserForTest(t, username, password)
+
+	router := chi.NewRouter()
+	router.Use(testServer.AuthMiddleware)
+	router.Patch("/api/v1/me", testServer.UpdateCurrentUserHandler)
+
+	t.Run("update display name", func(t *testing.T) {
+		newDisplayName := "Nowa Super Nazwa"
+		payload := UpdateMeRequest{DisplayName: &newDisplayName}
+		body, _ := json.Marshal(payload)
+		req := httptest.NewRequest("PATCH", "/api/v1/me", bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusOK, rr.Code)
+
+		var updatedUser models.User
+		err := json.Unmarshal(rr.Body.Bytes(), &updatedUser)
+		require.NoError(t, err)
+		require.NotNil(t, updatedUser.DisplayName)
+		require.Equal(t, newDisplayName, *updatedUser.DisplayName)
+
+		userFromDB, err := testServer.store.GetUserByID(context.Background(), testUser.ID)
+		require.NoError(t, err)
+		require.NotNil(t, userFromDB.DisplayName)
+		require.Equal(t, newDisplayName, *userFromDB.DisplayName)
 	})
 }
