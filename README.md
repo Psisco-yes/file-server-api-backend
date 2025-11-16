@@ -229,11 +229,10 @@ Lista zidentyfikowanych problemów i planowanych do wdrożenia funkcjonalności.
 -   [ ] **Niekompletne przywracanie z kosza:** Przywrócenie usuniętego folderu odtwarza tylko sam folder, bez jego zawartości, co prowadzi do utraty danych. Należy zaimplementować rekurencyjne przywracanie.
 -   [ ] **Brak obsługi dużych plików:** Obecne ograniczenie uploadu do 1 GB i brak mechanizmu "chunked upload" uniemożliwia wgrywanie większych plików i obciąża pamięć RAM serwera.
 -   [ ] **Wysokie zużycie RAM przy archiwizacji:** Mechanizm tworzenia archiwum ZIP zbiera metadane wszystkich plików w pamięci przed rozpoczęciem pakowania, co może prowadzić do problemów z wydajnością przy bardzo dużej liczbie plików.
--   [ ] **Nieskuteczne unieważnianie sesji dla WebSockets:** Blacklisting na przyszłość.
+-   [ ] **Nieskuteczne unieważnianie sesji dla WebSockets:** Dodać funkcjonalość Blacklisting-u do WebSockets, aby uniemożliwić ponowne podłączanie "przedawnionym" tokenem.
 
 ### Nowe Funkcje do Implementacji
 
--   [X] **Kopiowanie Plików i Folderów:** Dodanie możliwości tworzenia kopii plików i całych struktur folderów.
--   [ ] **Wyszukiwarka Plików:** Zaimplementowanie endpointu pozwalającego na wyszukiwanie plików i folderów po nazwie w całej dostępnej przestrzeni użytkownika (własne i udostępnione).
+-   [ ] **Filtrowanie wyników w wyszukiwarce plików:** Zaimplementowanie endpointu pozwalającego na wyszukiwanie plików i folderów po nazwie w całej dostępnej przestrzeni użytkownika (własne i udostępnione).
 -   [ ] **Dziennik Audytowy (Audit Log):** Stworzenie oddzielnego, niezmiennego dziennika zdarzeń związanych z bezpieczeństwem (logowanie, dostęp do plików, zmiany uprawnień) w celu zapewnienia rozliczalności i zgodności z RODO.
 -   [ ] **Większa personalizacja:** Stworzenie dodatkowych endpointów do np. zmiany wyświetlanej nazwy konta.

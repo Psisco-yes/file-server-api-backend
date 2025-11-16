@@ -132,8 +132,8 @@ func main() {
 			})
 
 			r.Get("/favorites", server.ListFavoritesHandler)
-
 			r.Get("/events", server.GetEventsHandler)
+			r.Get("/search", server.SearchHandler)
 		})
 	})
 

@@ -1045,3 +1045,57 @@ func (q *Queries) GetSubtree(ctx context.Context, nodeID string) ([]models.Node,
 	}
 	return nodes, nil
 }
+
+func (q *Queries) SearchNodes(ctx context.Context, userID int64, query string, limit int, offset int) ([]models.Node, error) {
+	searchQuery := "%" + query + "%"
+
+	sql := `
+		SELECT id, owner_id, parent_id, name, node_type, size_bytes, mime_type, created_at, modified_at
+		FROM nodes
+		WHERE owner_id = $1 AND name ILIKE $2 AND deleted_at IS NULL
+
+		UNION
+
+		SELECT n.id, n.owner_id, n.parent_id, n.name, n.node_type, n.size_bytes, n.mime_type, n.created_at, n.modified_at
+		FROM nodes n
+		WHERE n.name ILIKE $2 AND n.deleted_at IS NULL AND EXISTS (
+			WITH RECURSIVE node_parents AS (
+				SELECT id, parent_id FROM nodes WHERE id = n.id
+				UNION ALL
+				SELECT np_n.id, np_n.parent_id FROM nodes np_n JOIN node_parents np ON np_n.id = np.parent_id
+			)
+			SELECT 1
+			FROM shares s
+			WHERE s.recipient_id = $1 AND s.node_id IN (SELECT id FROM node_parents)
+		)
+		ORDER BY name
+		LIMIT $3 OFFSET $4;
+	`
+	rows, err := q.db.Query(ctx, sql, userID, searchQuery, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var nodes []models.Node
+	for rows.Next() {
+		var node models.Node
+		if err := rows.Scan(
+			&node.ID, &node.OwnerID, &node.ParentID, &node.Name, &node.NodeType,
+			&node.SizeBytes, &node.MimeType, &node.CreatedAt, &node.ModifiedAt,
+		); err != nil {
+			return nil, err
+		}
+		nodes = append(nodes, node)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if nodes == nil {
+		return []models.Node{}, nil
+	}
+
+	return nodes, nil
+}
