@@ -7,6 +7,7 @@ import (
 
 	"serwer-plikow/internal/auth"
 	"serwer-plikow/internal/database"
+	_ "serwer-plikow/internal/models"
 )
 
 // @Summary      Get current user info
@@ -25,8 +26,14 @@ func (s *Server) GetCurrentUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	user, err := s.store.GetUserByID(r.Context(), claims.UserID)
+	if err != nil || user == nil {
+		http.Error(w, "Failed to retrieve current user data", http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(claims)
+	json.NewEncoder(w).Encode(user)
 }
 
 type StorageUsageResponse struct {
@@ -127,4 +134,50 @@ func (s *Server) ChangePasswordHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+type UpdateMeRequest struct {
+	DisplayName *string `json:"display_name,omitempty" example:"Jan Kowalski"`
+}
+
+// @Summary      Update current user's profile
+// @Description  Updates properties of the currently authenticated user, such as their display name.
+// @Tags         users
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        updateRequest  body      UpdateMeRequest  true  "Fields to update"
+// @Success      200            {object}  models.User
+// @Failure      400            {string}  string "Bad Request"
+// @Failure      401            {string}  string "Unauthorized"
+// @Failure      500            {string}  string "Internal Server Error"
+// @Router       /me [patch]
+func (s *Server) UpdateCurrentUserHandler(w http.ResponseWriter, r *http.Request) {
+	claims := GetUserFromContext(r.Context())
+
+	var req UpdateMeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	params := database.UpdateUserParams{
+		ID:          claims.UserID,
+		DisplayName: req.DisplayName,
+	}
+
+	err := s.store.UpdateUser(r.Context(), params)
+	if err != nil {
+		http.Error(w, "Failed to update user profile", http.StatusInternalServerError)
+		return
+	}
+
+	updatedUser, err := s.store.GetUserByID(r.Context(), claims.UserID)
+	if err != nil || updatedUser == nil {
+		http.Error(w, "Failed to retrieve updated user profile", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(updatedUser)
 }

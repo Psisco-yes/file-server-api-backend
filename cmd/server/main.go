@@ -99,6 +99,7 @@ func main() {
 				r.Get("/", server.GetCurrentUserHandler)
 				r.Get("/storage", server.GetStorageUsageHandler)
 				r.Patch("/password", server.ChangePasswordHandler)
+				r.Patch("/", server.UpdateCurrentUserHandler)
 			})
 
 			r.Route("/nodes", func(r chi.Router) {

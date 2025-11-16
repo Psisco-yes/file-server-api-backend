@@ -1099,3 +1099,17 @@ func (q *Queries) SearchNodes(ctx context.Context, userID int64, query string, l
 
 	return nodes, nil
 }
+
+type UpdateUserParams struct {
+	ID          int64
+	DisplayName *string
+}
+
+func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) error {
+	if arg.DisplayName != nil {
+		query := `UPDATE users SET display_name = $1 WHERE id = $2`
+		_, err := q.db.Exec(ctx, query, *arg.DisplayName, arg.ID)
+		return err
+	}
+	return nil
+}

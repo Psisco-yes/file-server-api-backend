@@ -222,17 +222,16 @@ Wszystkie komunikaty są wysyłane w formacie JSON i mają następującą strukt
 
 ## Roadmap / TODO
 
-Lista zidentyfikowanych problemów i planowanych do wdrożenia funkcjonalności.
+Lista zidentyfikowanych ograniczeń i planowanych do wdrożenia funkcjonalności, które wykraczają poza obecny zakres projektu.
 
-### Błędy Krytyczne i Ograniczenia do Naprawy
+### Ograniczenia do Naprawy w Przyszłości
 
--   [ ] **Niekompletne przywracanie z kosza:** Przywrócenie usuniętego folderu odtwarza tylko sam folder, bez jego zawartości, co prowadzi do utraty danych. Należy zaimplementować rekurencyjne przywracanie.
--   [ ] **Brak obsługi dużych plików:** Obecne ograniczenie uploadu do 1 GB i brak mechanizmu "chunked upload" uniemożliwia wgrywanie większych plików i obciąża pamięć RAM serwera.
--   [ ] **Wysokie zużycie RAM przy archiwizacji:** Mechanizm tworzenia archiwum ZIP zbiera metadane wszystkich plików w pamięci przed rozpoczęciem pakowania, co może prowadzić do problemów z wydajnością przy bardzo dużej liczbie plików.
--   [ ] **Nieskuteczne unieważnianie sesji dla WebSockets:** Dodać funkcjonalość Blacklisting-u do WebSockets, aby uniemożliwić ponowne podłączanie "przedawnionym" tokenem.
+-   [ ] **Niekompletne przywracanie z kosza:** Przywrócenie usuniętego folderu odtwarza tylko sam folder, bez jego zawartości. W przyszłości należy zaimplementować rekurencyjne przywracanie z obsługą konfliktów nazw.
+-   [ ] **Brak obsługi bardzo dużych plików:** Obecne ograniczenie uploadu (domyślnie 1 GB) i brak mechanizmu "chunked upload" uniemożliwia wgrywanie plików o dużym rozmiarze.
+-   [ ] **Wysokie zużycie RAM przy archiwizacji:** Mechanizm tworzenia archiwum ZIP zbiera metadane wszystkich plików w pamięci przed rozpoczęciem pakowania, co może prowadzić do problemów z wydajnością przy bardzo dużych strukturach folderów.
+-   [ ] **Natychmiastowe unieważnianie tokenów (Blacklisting):** Obecnie `access token` jest ważny do momentu naturalnego wygaśnięcia. W przyszłości można zaimplementować mechanizm "czarnej listy" do natychmiastowego unieważniania tokenów po wylogowaniu.
 
-### Nowe Funkcje do Implementacji
+### Nowe Funkcje do Implementacji w Przyszłości
 
--   [ ] **Filtrowanie wyników w wyszukiwarce plików:** Zaimplementowanie endpointu pozwalającego na wyszukiwanie plików i folderów po nazwie w całej dostępnej przestrzeni użytkownika (własne i udostępnione).
--   [ ] **Dziennik Audytowy (Audit Log):** Stworzenie oddzielnego, niezmiennego dziennika zdarzeń związanych z bezpieczeństwem (logowanie, dostęp do plików, zmiany uprawnień) w celu zapewnienia rozliczalności i zgodności z RODO.
--   [ ] **Większa personalizacja:** Stworzenie dodatkowych endpointów do np. zmiany wyświetlanej nazwy konta.
+-   [ ] **Filtrowanie Wyszukiwarki Plików:** Rozbudowa `/search` o zaawansowane opcje filtrowania (np. po typie pliku, dacie modyfikacji).
+-   [ ] **Dziennik Audytowy (Audit Log):** Stworzenie oddzielnego, niezmiennego dziennika zdarzeń związanych z bezpieczeństwem (logowanie, dostęp do plików, zmiany uprawnień) w celu zapewnienia pełnej rozliczalności.
