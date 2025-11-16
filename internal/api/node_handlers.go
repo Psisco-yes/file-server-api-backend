@@ -355,12 +355,19 @@ func (s *Server) UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 		})
 
 		if txErr != nil {
-			log.Printf("ERROR creating db record for file %s: %v", handler.Filename, txErr)
 			if nodeID != "" {
 				if cleanupErr := s.storage.Delete(nodeID); cleanupErr != nil {
 					log.Printf("CRITICAL: Failed to clean up orphaned file %s: %v", nodeID, cleanupErr)
 				}
 			}
+
+			var pgErr *pgconn.PgError
+			if errors.As(txErr, &pgErr) && pgErr.Code == "23505" {
+				http.Error(w, fmt.Sprintf("A file named '%s' already exists in this location", handler.Filename), http.StatusConflict)
+				return
+			}
+
+			log.Printf("ERROR creating db record for file %s: %v", handler.Filename, txErr)
 			continue
 		}
 
@@ -985,7 +992,7 @@ func (s *Server) CopyNodeHandler(w http.ResponseWriter, r *http.Request) {
 			if txErr != nil {
 				var pgErr *pgconn.PgError
 				if errors.As(txErr, &pgErr) && pgErr.Code == "23505" {
-					return nil, fmt.Errorf("a node named '%s' already exists in the target location: %w", params.Name, database.ErrDuplicateNodeName)
+					return nil, database.ErrDuplicateNodeName
 				}
 				return nil, txErr
 			}
@@ -1048,7 +1055,7 @@ func (s *Server) CopyNodeHandler(w http.ResponseWriter, r *http.Request) {
 			s.storage.Delete(fileID)
 		}
 		if errors.Is(txErr, database.ErrDuplicateNodeName) {
-			http.Error(w, txErr.Error(), http.StatusConflict)
+			http.Error(w, "A node with the same name already exists in the target location", http.StatusConflict)
 			return
 		}
 		http.Error(w, fmt.Sprintf("Failed to complete copy operation: %v", txErr), http.StatusInternalServerError)
