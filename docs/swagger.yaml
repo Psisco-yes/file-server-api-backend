@@ -594,6 +594,39 @@ paths:
       summary: Move node to trash
       tags:
       - nodes
+    get:
+      description: Retrieves the metadata for a single file or folder by its ID. The
+        user must be the owner or have access through a share.
+      parameters:
+      - description: The ID of the node to retrieve
+        in: path
+        name: nodeId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api.NodeResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Get node details
+      tags:
+      - nodes
     patch:
       consumes:
       - application/json

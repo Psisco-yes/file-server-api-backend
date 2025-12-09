@@ -1024,3 +1024,70 @@ func TestUpdateCurrentUserHandler_Integration(t *testing.T) {
 		require.Equal(t, newDisplayName, *userFromDB.DisplayName)
 	})
 }
+
+func TestGetNodeHandler_Integration(t *testing.T) {
+	userA := createTestUserWithPassword(t, "user_getnode_a", "password")
+	userB := createTestUserWithPassword(t, "user_getnode_b", "password")
+
+	loginA := loginUserForTest(t, "user_getnode_a", "password")
+	loginB := loginUserForTest(t, "user_getnode_b", "password")
+
+	privateNodeA, err := createTestNodeAPI(t, "Private A", "file", nil, userA.ID)
+	require.NoError(t, err)
+	sharedNodeB, err := createTestNodeAPI(t, "Shared B", "file", nil, userB.ID)
+	require.NoError(t, err)
+
+	_, err = testServer.store.ShareNode(context.Background(), database.ShareNodeParams{
+		NodeID:      sharedNodeB.ID,
+		SharerID:    userB.ID,
+		RecipientID: userA.ID,
+		Permissions: "read",
+	})
+	require.NoError(t, err)
+
+	router := chi.NewRouter()
+	router.Use(testServer.AuthMiddleware)
+	router.Get("/api/v1/nodes/{nodeId}", testServer.GetNodeHandler)
+
+	t.Run("owner can get their own node", func(t *testing.T) {
+		url := fmt.Sprintf("/api/v1/nodes/%s", privateNodeA.ID)
+		req := httptest.NewRequest("GET", url, nil)
+		req.Header.Set("Authorization", "Bearer "+loginA.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+		require.Equal(t, http.StatusOK, rr.Code)
+		var node models.Node
+		json.Unmarshal(rr.Body.Bytes(), &node)
+		require.Equal(t, privateNodeA.ID, node.ID)
+	})
+
+	t.Run("recipient can get a shared node", func(t *testing.T) {
+		url := fmt.Sprintf("/api/v1/nodes/%s", sharedNodeB.ID)
+		req := httptest.NewRequest("GET", url, nil)
+		req.Header.Set("Authorization", "Bearer "+loginA.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+		require.Equal(t, http.StatusOK, rr.Code)
+		var node models.Node
+		json.Unmarshal(rr.Body.Bytes(), &node)
+		require.Equal(t, sharedNodeB.ID, node.ID)
+	})
+
+	t.Run("other user cannot get a private node", func(t *testing.T) {
+		url := fmt.Sprintf("/api/v1/nodes/%s", privateNodeA.ID)
+		req := httptest.NewRequest("GET", url, nil)
+		req.Header.Set("Authorization", "Bearer "+loginB.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+		require.Equal(t, http.StatusNotFound, rr.Code)
+	})
+
+	t.Run("request for non-existent node returns 404", func(t *testing.T) {
+		url := fmt.Sprintf("/api/v1/nodes/%s", "non_existent_id_123")
+		req := httptest.NewRequest("GET", url, nil)
+		req.Header.Set("Authorization", "Bearer "+loginA.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+		require.Equal(t, http.StatusNotFound, rr.Code)
+	})
+}

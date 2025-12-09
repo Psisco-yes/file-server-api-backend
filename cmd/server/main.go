@@ -109,6 +109,7 @@ func main() {
 				r.Get("/archive", server.DownloadArchiveHandler)
 
 				r.Route("/{nodeId}", func(r chi.Router) {
+					r.Get("/", server.GetNodeHandler)
 					r.Get("/download", server.DownloadFileHandler)
 					r.Patch("/", server.UpdateNodeHandler)
 					r.Delete("/", server.DeleteNodeHandler)

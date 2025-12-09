@@ -1078,3 +1078,32 @@ func (s *Server) CopyNodeHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(copiedRootNode)
 }
+
+// @Summary      Get node details
+// @Description  Retrieves the metadata for a single file or folder by its ID. The user must be the owner or have access through a share.
+// @Tags         nodes
+// @Produce      json
+// @Security     BearerAuth
+// @Param        nodeId   path      string  true  "The ID of the node to retrieve"
+// @Success      200      {object}  NodeResponse
+// @Failure      401      {string}  string "Unauthorized"
+// @Failure      404      {string}  string "Not Found"
+// @Failure      500      {string}  string "Internal Server Error"
+// @Router       /nodes/{nodeId} [get]
+func (s *Server) GetNodeHandler(w http.ResponseWriter, r *http.Request) {
+	claims := GetUserFromContext(r.Context())
+	nodeID := chi.URLParam(r, "nodeId")
+
+	node, err := s.store.GetNodeIfAccessible(r.Context(), nodeID, claims.UserID)
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	if node == nil {
+		http.Error(w, "Node not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(node)
+}
