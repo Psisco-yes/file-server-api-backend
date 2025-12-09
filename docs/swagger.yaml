@@ -1,0 +1,1396 @@
+basePath: /api/v1
+definitions:
+  internal_api.ChangePasswordRequest:
+    properties:
+      new_password:
+        example: newStrongPassword456
+        type: string
+      old_password:
+        example: password123
+        type: string
+    type: object
+  internal_api.CopyNodeRequest:
+    properties:
+      new_name:
+        example: Kopia Raportu
+        type: string
+      parent_id:
+        example: target_folder_id
+        type: string
+    type: object
+  internal_api.CreateFolderRequest:
+    properties:
+      name:
+        example: Nowy Folder
+        type: string
+      parent_id:
+        example: _vx2a-43VqRT5wz_s9u4
+        type: string
+    type: object
+  internal_api.EventResponse:
+    properties:
+      event_time:
+        type: string
+      event_type:
+        example: node_created
+        type: string
+      id:
+        example: 123
+        type: integer
+      payload:
+        type: object
+    type: object
+  internal_api.LoginRequest:
+    properties:
+      password:
+        example: password123
+        type: string
+      username:
+        example: admin
+        type: string
+    type: object
+  internal_api.NodeResponse:
+    properties:
+      created_at:
+        type: string
+      id:
+        example: _vx2a-43VqRT5wz_s9u4
+        type: string
+      mime_type:
+        example: application/vnd.openxmlformats-officedocument.wordprocessingml.document
+        type: string
+      modified_at:
+        type: string
+      name:
+        example: Raport_Q3.docx
+        type: string
+      node_type:
+        example: file
+        type: string
+      owner_id:
+        example: 1
+        type: integer
+      parent_id:
+        example: fLW5kAh2ia9vYmjMnU4nZ
+        type: string
+      size_bytes:
+        example: 123456
+        type: integer
+    type: object
+  internal_api.OutgoingShareResponse:
+    properties:
+      id:
+        example: 42
+        type: integer
+      node_id:
+        example: _vx2a-43VqRT5wz_s9u4
+        type: string
+      node_name:
+        example: Wspólny Projekt
+        type: string
+      node_type:
+        example: folder
+        type: string
+      permissions:
+        example: write
+        type: string
+      recipient_username:
+        example: user2
+        type: string
+      shared_at:
+        type: string
+    type: object
+  internal_api.RefreshTokenRequest:
+    properties:
+      refresh_token:
+        example: V1StGXR8_Z5jdHi6B-myT78q_Z5jdHi6B-myT78q
+        type: string
+    type: object
+  internal_api.ShareRequest:
+    properties:
+      permissions:
+        enum:
+        - read
+        - write
+        example: read
+        type: string
+      recipient_username:
+        example: user2
+        type: string
+    type: object
+  internal_api.ShareResponse:
+    properties:
+      id:
+        example: 42
+        type: integer
+      node_id:
+        example: _vx2a-43VqRT5wz_s9u4
+        type: string
+      permissions:
+        example: read
+        type: string
+      recipient_id:
+        example: 2
+        type: integer
+      shared_at:
+        type: string
+      sharer_id:
+        example: 1
+        type: integer
+    type: object
+  internal_api.SharingUserResponse:
+    properties:
+      display_name:
+        example: Jan Kowalski
+        type: string
+      id:
+        example: 2
+        type: integer
+      username:
+        example: user2
+        type: string
+    type: object
+  internal_api.StorageUsageResponse:
+    properties:
+      quota_bytes:
+        type: integer
+      used_bytes:
+        type: integer
+    type: object
+  internal_api.TokenResponse:
+    properties:
+      access_token:
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJ1c2VybmFtZSI6ImFkbWluIiwiZXhwIjoxNjE2NDI2NzY2fQ....
+        type: string
+      refresh_token:
+        example: V1StGXR8_Z5jdHi6B-myT78q_Z5jdHi6B-myT78q
+        type: string
+    type: object
+  internal_api.UpdateMeRequest:
+    properties:
+      display_name:
+        example: Jan Kowalski
+        type: string
+    type: object
+  internal_api.UpdateNodeRequest:
+    properties:
+      name:
+        example: Nowa Nazwa Pliku
+        type: string
+      parent_id:
+        example: bNowyFolderRodzic123
+        type: string
+    type: object
+  jwt.NumericDate:
+    properties:
+      time.Time:
+        type: string
+    type: object
+  serwer-plikow_internal_auth.AppClaims:
+    properties:
+      aud:
+        description: the `aud` (Audience) claim. See https://datatracker.ietf.org/doc/html/rfc7519#section-4.1.3
+        items:
+          type: string
+        type: array
+      exp:
+        allOf:
+        - $ref: '#/definitions/jwt.NumericDate'
+        description: the `exp` (Expiration Time) claim. See https://datatracker.ietf.org/doc/html/rfc7519#section-4.1.4
+      iat:
+        allOf:
+        - $ref: '#/definitions/jwt.NumericDate'
+        description: the `iat` (Issued At) claim. See https://datatracker.ietf.org/doc/html/rfc7519#section-4.1.6
+      iss:
+        description: the `iss` (Issuer) claim. See https://datatracker.ietf.org/doc/html/rfc7519#section-4.1.1
+        type: string
+      jti:
+        description: the `jti` (JWT ID) claim. See https://datatracker.ietf.org/doc/html/rfc7519#section-4.1.7
+        type: string
+      nbf:
+        allOf:
+        - $ref: '#/definitions/jwt.NumericDate'
+        description: the `nbf` (Not Before) claim. See https://datatracker.ietf.org/doc/html/rfc7519#section-4.1.5
+      sub:
+        description: the `sub` (Subject) claim. See https://datatracker.ietf.org/doc/html/rfc7519#section-4.1.2
+        type: string
+      user_id:
+        type: integer
+      username:
+        type: string
+    type: object
+  serwer-plikow_internal_models.Session:
+    properties:
+      client_ip:
+        example: 198.51.100.10
+        type: string
+      created_at:
+        type: string
+      expires_at:
+        type: string
+      id:
+        example: a1b2c3d4-e5f6-7890-1234-567890abcdef
+        type: string
+      user_agent:
+        example: Mozilla/5.0 (Windows NT 10.0; Win64; x64) ...
+        type: string
+    type: object
+  serwer-plikow_internal_models.User:
+    properties:
+      created_at:
+        type: string
+      display_name:
+        type: string
+      id:
+        type: integer
+      storage_quota_bytes:
+        type: integer
+      storage_used_bytes:
+        type: integer
+      username:
+        type: string
+    type: object
+info:
+  contact: {}
+  description: A comprehensive file server API built with Go. It supports file and
+    folder management, sharing, real-time updates via WebSockets, and more. All protected
+    endpoints require a Bearer Token for authorization.
+  title: File Server API
+  version: "1.0"
+paths:
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticates a user and returns a short-lived access token and
+        a long-lived refresh token.
+      parameters:
+      - description: Login Credentials
+        in: body
+        name: loginRequest
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api.TokenResponse'
+        "400":
+          description: Invalid request body
+          schema:
+            type: string
+        "401":
+          description: Invalid username or password
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Logs a user in
+      tags:
+      - auth
+  /auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Provides a new short-lived access token and a new refresh token
+        in exchange for a valid, non-expired refresh token. Implements refresh token
+        rotation.
+      parameters:
+      - description: Refresh Token
+        in: body
+        name: refreshTokenRequest
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api.RefreshTokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api.TokenResponse'
+        "400":
+          description: Invalid request body or missing token
+          schema:
+            type: string
+        "401":
+          description: Invalid or expired refresh token
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Refresh access token
+      tags:
+      - auth
+  /events:
+    get:
+      description: Retrieves a list of events that have occurred since a given event
+        ID. Used for client-side cache synchronization.
+      parameters:
+      - description: The ID of the last event received. Omit or use 0 to get all events.
+        in: query
+        name: since
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_api.EventResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Get new events
+      tags:
+      - events
+  /favorites:
+    get:
+      description: Retrieves a list of all files and folders marked as favorite by
+        the current user.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_api.NodeResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: List favorite nodes
+      tags:
+      - favorites
+  /me:
+    get:
+      description: Retrieves information about the currently authenticated user from
+        their JWT token.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serwer-plikow_internal_auth.AppClaims'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Get current user info
+      tags:
+      - users
+    patch:
+      consumes:
+      - application/json
+      description: Updates properties of the currently authenticated user, such as
+        their display name.
+      parameters:
+      - description: Fields to update
+        in: body
+        name: updateRequest
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api.UpdateMeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serwer-plikow_internal_models.User'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Update current user's profile
+      tags:
+      - users
+  /me/password:
+    patch:
+      consumes:
+      - application/json
+      description: Allows the authenticated user to change their own password. The
+        new password must be at least 8 characters long. Upon successful password
+        change, all other active sessions for the user will be terminated for security
+        reasons.
+      parameters:
+      - description: Old and new password
+        in: body
+        name: changePasswordRequest
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api.ChangePasswordRequest'
+      responses:
+        "204":
+          description: No Content - Password changed successfully
+          schema:
+            type: "null"
+        "400":
+          description: Bad Request - New password is weak (less than 8 characters)
+            or empty
+          schema:
+            type: string
+        "401":
+          description: Unauthorized - Old password does not match
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Change current user's password
+      tags:
+      - users
+  /me/storage:
+    get:
+      description: Retrieves the current storage usage and quota for the authenticated
+        user.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api.StorageUsageResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "404":
+          description: User not found
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Get storage usage
+      tags:
+      - users
+  /nodes:
+    get:
+      description: Lists the user's own files and folders in a specified parent folder
+        or in the root directory.
+      parameters:
+      - description: ID of the parent folder to list. Omit for root.
+        in: query
+        name: parent_id
+        type: string
+      - default: 100
+        description: Number of items to return
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset for pagination
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_api.NodeResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: List user's own nodes
+      tags:
+      - nodes
+  /nodes/{nodeId}:
+    delete:
+      description: Moves a file or a folder (and its contents) to the trash (soft
+        delete). Requires write permission in the folder containing the node. The
+        node is moved to its owner's trash.
+      parameters:
+      - description: Node ID to move to trash
+        in: path
+        name: nodeId
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+          schema:
+            type: "null"
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "403":
+          description: Forbidden - Write permission denied
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Move node to trash
+      tags:
+      - nodes
+    patch:
+      consumes:
+      - application/json
+      description: Updates a node's properties, such as its name or parent folder.
+        To move a node to the root directory, provide "root" as the parent_id. Moving
+        nodes between different owners is not allowed. Requires write permission in
+        the source and target folders.
+      parameters:
+      - description: Node ID to update
+        in: path
+        name: nodeId
+        required: true
+        type: string
+      - description: Properties to update
+        in: body
+        name: updateRequest
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api.UpdateNodeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api.NodeResponse'
+        "400":
+          description: Bad Request - Invalid operation (e.g., moving between owners,
+            circular move)
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "403":
+          description: Forbidden - Write permission denied
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+        "409":
+          description: Conflict
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Update a node
+      tags:
+      - nodes
+  /nodes/{nodeId}/copy:
+    post:
+      consumes:
+      - application/json
+      description: Creates a deep copy of a file or folder (and its contents) to a
+        new location. By default, the copy retains the original name. If a node with
+        the same name already exists in the target location, a 409 Conflict error
+        is returned. An optional 'new_name' can be provided for the top-level copied
+        node. The new node inherits the owner of the target folder. Use "root" for
+        the target ParentID.
+      parameters:
+      - description: Node ID of the file/folder to copy
+        in: path
+        name: nodeId
+        required: true
+        type: string
+      - description: Target parent folder and optional new name
+        in: body
+        name: copyRequest
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api.CopyNodeRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_api.NodeResponse'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "403":
+          description: Forbidden - Write permission denied
+          schema:
+            type: string
+        "404":
+          description: Not Found - Source or destination not found
+          schema:
+            type: string
+        "409":
+          description: Conflict - A node with the same name already exists in the
+            target location
+          schema:
+            type: string
+        "413":
+          description: Payload Too Large - Not enough storage space
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Copy a node
+      tags:
+      - nodes
+  /nodes/{nodeId}/download:
+    get:
+      description: Downloads a single file by its ID.
+      parameters:
+      - description: Node ID of the file to download
+        in: path
+        name: nodeId
+        required: true
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: The file content
+          schema:
+            type: file
+        "400":
+          description: Bad Request - Cannot download a folder
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Download a file
+      tags:
+      - nodes
+  /nodes/{nodeId}/favorite:
+    delete:
+      description: Removes a file or folder from the current user's list of favorites.
+      parameters:
+      - description: Node ID to remove from favorites
+        in: path
+        name: nodeId
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+          schema:
+            type: "null"
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Remove a node from favorites
+      tags:
+      - favorites
+    post:
+      description: Marks a file or folder as a favorite for the current user.
+      parameters:
+      - description: Node ID to add to favorites
+        in: path
+        name: nodeId
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+          schema:
+            type: "null"
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "404":
+          description: Not Found - Node does not exist or user lacks access
+          schema:
+            type: string
+        "409":
+          description: Conflict - Node is already in favorites
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Add a node to favorites
+      tags:
+      - favorites
+  /nodes/{nodeId}/restore:
+    post:
+      description: Restores a file or folder from the trash to its original location.
+        Fails if a node with the same name already exists in the target location.
+      parameters:
+      - description: Node ID to restore
+        in: path
+        name: nodeId
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: "null"
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+        "409":
+          description: Conflict - a node with the same name already exists in the
+            original location
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Restore a node from trash
+      tags:
+      - nodes
+  /nodes/{nodeId}/share:
+    post:
+      consumes:
+      - application/json
+      description: Shares a file or folder with another user, granting them read or
+        write permissions.
+      parameters:
+      - description: Node ID to share
+        in: path
+        name: nodeId
+        required: true
+        type: string
+      - description: Share details
+        in: body
+        name: shareRequest
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api.ShareRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_api.ShareResponse'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "404":
+          description: Not Found - Node or recipient not found
+          schema:
+            type: string
+        "409":
+          description: Conflict - Node is already shared with this user
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Share a node
+      tags:
+      - shares
+  /nodes/archive:
+    get:
+      description: Downloads multiple files and/or folders as a single ZIP archive.
+      parameters:
+      - description: Comma-separated list of Node IDs to include in the archive
+        in: query
+        name: ids
+        required: true
+        type: string
+      produces:
+      - application/zip
+      responses:
+        "200":
+          description: The ZIP archive content
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "404":
+          description: Not Found - one of the nodes does not exist
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Download an archive
+      tags:
+      - nodes
+  /nodes/file:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Uploads one or more files. If uploaded inside a shared folder with
+        write permissions, the folder's owner becomes the owner of the new file(s).
+        The total size of the request payload cannot exceed 1GB. Exceeding the owner's
+        storage quota will result in an error.
+      parameters:
+      - description: The file(s) to upload. Can be provided multiple times.
+        in: formData
+        name: file
+        required: true
+        type: file
+      - description: ID of the parent folder.
+        in: formData
+        name: parent_id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            items:
+              $ref: '#/definitions/internal_api.NodeResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "403":
+          description: Forbidden - Write permission denied
+          schema:
+            type: string
+        "404":
+          description: Not Found - Parent folder not found
+          schema:
+            type: string
+        "413":
+          description: Payload Too Large - either the request exceeds 1GB or the owner's
+            storage quota is exceeded.
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Upload file(s)
+      tags:
+      - nodes
+  /nodes/folder:
+    post:
+      consumes:
+      - application/json
+      description: Creates a new folder. If created inside a shared folder with write
+        permissions, the folder's owner becomes the owner of the new folder. Otherwise,
+        the creator is the owner.
+      parameters:
+      - description: Folder details
+        in: body
+        name: folderRequest
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api.CreateFolderRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_api.NodeResponse'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "403":
+          description: Forbidden - Write permission denied
+          schema:
+            type: string
+        "404":
+          description: Not Found - Parent folder not found
+          schema:
+            type: string
+        "409":
+          description: Conflict - a folder with the same name already exists
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Create a new folder
+      tags:
+      - nodes
+  /search:
+    get:
+      description: Searches for nodes (files and folders) by name across the user's
+        own space and all items shared with them.
+      parameters:
+      - description: Search query string
+        in: query
+        name: q
+        required: true
+        type: string
+      - default: 100
+        description: Number of items to return
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset for pagination
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_api.NodeResponse'
+            type: array
+        "400":
+          description: Bad Request - Missing query
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Search for files and folders
+      tags:
+      - search
+  /sessions:
+    get:
+      description: Gets a list of all active sessions for the currently authenticated
+        user. This can be used to display a list of devices where the user is logged
+        in.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/serwer-plikow_internal_models.Session'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: List active sessions
+      tags:
+      - sessions
+  /sessions/{sessionId}:
+    delete:
+      description: Terminates (logs out) a specific session by its ID. A user can
+        only terminate their own sessions. This will also close any active WebSocket
+        connections associated with the terminated user.
+      parameters:
+      - description: ID of the session to terminate
+        format: uuid
+        in: path
+        name: sessionId
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+          schema:
+            type: "null"
+        "400":
+          description: Bad Request - Invalid session ID format
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Terminate a specific session
+      tags:
+      - sessions
+  /sessions/terminate_all:
+    post:
+      description: Terminates all active sessions for the currently authenticated
+        user, effectively logging them out from all devices. This will also close
+        all active WebSocket connections for the user.
+      responses:
+        "204":
+          description: No Content
+          schema:
+            type: "null"
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Terminate all sessions (Log out everywhere)
+      tags:
+      - sessions
+  /shares/{shareId}:
+    delete:
+      description: Revokes a share entry. Only the original sharer can do this.
+      parameters:
+      - description: ID of the share to delete
+        in: path
+        name: shareId
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+          schema:
+            type: "null"
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Revoke a share
+      tags:
+      - shares
+  /shares/incoming/nodes:
+    get:
+      description: Lists files and folders shared with the current user by a specific
+        sharer. Can list the root of shared items or the content of a subfolder.
+      parameters:
+      - description: Username of the person who shared the content
+        in: query
+        name: sharer_username
+        required: true
+        type: string
+      - description: ID of the shared parent folder to list. Omit for the root of
+          shared items.
+        in: query
+        name: parent_id
+        type: string
+      - default: 100
+        description: Number of items to return
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset for pagination
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_api.NodeResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "404":
+          description: Not Found or access denied
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: List items shared by a user
+      tags:
+      - shares
+  /shares/incoming/users:
+    get:
+      description: Gets a unique list of users who have shared one or more items with
+        the currently authenticated user. This is the root level for the "Shared with
+        me" view.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_api.SharingUserResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: List users who shared with me
+      tags:
+      - shares
+  /shares/outgoing:
+    get:
+      description: Gets a list of all items the currently authenticated user has shared
+        with others.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_api.OutgoingShareResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: List items I have shared
+      tags:
+      - shares
+  /trash:
+    get:
+      description: Retrieves a list of all files and folders currently in the user's
+        trash.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_api.NodeResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: List trash contents
+      tags:
+      - trash
+  /trash/purge:
+    delete:
+      description: Permanently deletes all files and folders from the user's trash.
+        This action cannot be undone.
+      responses:
+        "204":
+          description: No Content
+          schema:
+            type: "null"
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Purge trash
+      tags:
+      - trash
+  /ws:
+    get:
+      description: Upgrades an HTTP connection to a WebSocket connection for real-time
+        updates. The access token must be provided as a query parameter.
+      parameters:
+      - description: JWT Access Token
+        in: query
+        name: token
+        required: true
+        type: string
+      responses:
+        "101":
+          description: Switching Protocols
+          schema:
+            type: string
+        "401":
+          description: Unauthorized - Invalid or missing token
+          schema:
+            type: string
+      summary: Establish WebSocket connection
+      tags:
+      - websocket
+schemes:
+- http
+- https
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

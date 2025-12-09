@@ -28,8 +28,8 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
-      - ./certs/localhost+3.pem:/certs/cert.pem:ro
-      - ./certs/localhost+3-key.pem:/certs/key.pem:ro
+      - ./certs/cert.pem:/certs/cert.pem:ro
+      - ./certs/key.pem:/certs/key.pem:ro
     depends_on:
       - app
   
