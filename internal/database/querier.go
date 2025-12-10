@@ -1113,3 +1113,86 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) error {
 	}
 	return nil
 }
+
+func (q *Queries) GetNodePath(ctx context.Context, nodeID string) ([]models.Node, error) {
+	query := `
+		WITH RECURSIVE node_path AS (
+			SELECT * FROM nodes WHERE id = (SELECT parent_id FROM nodes WHERE id = $1)
+			UNION ALL
+			SELECT n.* FROM nodes n JOIN node_path np ON n.id = np.parent_id
+		)
+		SELECT id, owner_id, parent_id, name, node_type, size_bytes, mime_type, created_at, modified_at 
+		FROM node_path
+		WHERE deleted_at IS NULL;
+	`
+	rows, err := q.db.Query(ctx, query, nodeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var pathNodes []models.Node
+	for rows.Next() {
+		var node models.Node
+		if err := rows.Scan(
+			&node.ID, &node.OwnerID, &node.ParentID, &node.Name, &node.NodeType,
+			&node.SizeBytes, &node.MimeType, &node.CreatedAt, &node.ModifiedAt,
+		); err != nil {
+			return nil, err
+		}
+		pathNodes = append(pathNodes, node)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	for i, j := 0, len(pathNodes)-1; i < j; i, j = i+1, j-1 {
+		pathNodes[i], pathNodes[j] = pathNodes[j], pathNodes[i]
+	}
+
+	if pathNodes == nil {
+		return []models.Node{}, nil
+	}
+	return pathNodes, nil
+}
+
+func (q *Queries) GetSharesForNode(ctx context.Context, nodeID string, ownerID int64) ([]OutgoingShare, error) {
+	query := `
+		SELECT 
+			s.id, s.node_id, s.sharer_id, s.recipient_id, s.permissions, s.shared_at,
+			n.name AS node_name,
+			n.node_type AS node_type,
+			u.username AS recipient_username
+		FROM shares s
+		JOIN nodes n ON s.node_id = n.id
+		JOIN users u ON s.recipient_id = u.id
+		WHERE s.node_id = $1 AND s.sharer_id = $2
+		ORDER BY u.username
+	`
+	rows, err := q.db.Query(ctx, query, nodeID, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var shares []OutgoingShare
+	for rows.Next() {
+		var share OutgoingShare
+		err := rows.Scan(
+			&share.ID, &share.NodeID, &share.SharerID, &share.RecipientID, &share.Permissions, &share.SharedAt,
+			&share.NodeName, &share.NodeType, &share.RecipientUsername,
+		)
+		if err != nil {
+			return nil, err
+		}
+		shares = append(shares, share)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	if shares == nil {
+		return []OutgoingShare{}, nil
+	}
+
+	return shares, nil
+}

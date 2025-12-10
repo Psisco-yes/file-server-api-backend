@@ -118,6 +118,8 @@ func main() {
 					r.Delete("/favorite", server.RemoveFavoriteHandler)
 					r.Post("/share", server.ShareNodeHandler)
 					r.Post("/copy", server.CopyNodeHandler)
+					r.Get("/path", server.GetNodePathHandler)
+					r.Get("/shares", server.GetNodeSharesHandler)
 				})
 			})
 

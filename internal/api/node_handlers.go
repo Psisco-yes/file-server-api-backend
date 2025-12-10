@@ -1107,3 +1107,69 @@ func (s *Server) GetNodeHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(node)
 }
+
+// @Summary      Get node path (breadcrumbs)
+// @Description  Retrieves the hierarchical path (ancestors) for a given node, from the root down to the node's parent.
+// @Tags         nodes
+// @Produce      json
+// @Security     BearerAuth
+// @Param        nodeId  path      string  true  "The ID of the node"
+// @Success      200     {array}   NodeResponse
+// @Failure      401     {string}  string "Unauthorized"
+// @Failure      404     {string}  string "Not Found"
+// @Failure      500     {string}  string "Internal Server Error"
+// @Router       /nodes/{nodeId}/path [get]
+func (s *Server) GetNodePathHandler(w http.ResponseWriter, r *http.Request) {
+	claims := GetUserFromContext(r.Context())
+	nodeID := chi.URLParam(r, "nodeId")
+
+	node, err := s.store.GetNodeIfAccessible(r.Context(), nodeID, claims.UserID)
+	if err != nil || node == nil {
+		http.Error(w, "Node not found or access denied", http.StatusNotFound)
+		return
+	}
+
+	pathNodes, err := s.store.GetNodePath(r.Context(), nodeID)
+	if err != nil {
+		http.Error(w, "Failed to retrieve node path", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(pathNodes)
+}
+
+// @Summary      Get shares for a specific node
+// @Description  Retrieves a list of all users a specific node has been shared with. Only the owner of the node can perform this action.
+// @Tags         shares
+// @Produce      json
+// @Security     BearerAuth
+// @Param        nodeId  path      string  true  "The ID of the node"
+// @Success      200     {array}   OutgoingShareResponse
+// @Failure      401     {string}  string "Unauthorized"
+// @Failure      404     {string}  string "Not Found - Node not found or you are not the owner"
+// @Failure      500     {string}  string "Internal Server Error"
+// @Router       /nodes/{nodeId}/shares [get]
+func (s *Server) GetNodeSharesHandler(w http.ResponseWriter, r *http.Request) {
+	claims := GetUserFromContext(r.Context())
+	nodeID := chi.URLParam(r, "nodeId")
+
+	node, err := s.store.GetNodeByID(r.Context(), nodeID, claims.UserID)
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	if node == nil {
+		http.Error(w, "Node not found or you are not the owner", http.StatusNotFound)
+		return
+	}
+
+	shares, err := s.store.GetSharesForNode(r.Context(), nodeID, claims.UserID)
+	if err != nil {
+		http.Error(w, "Failed to retrieve shares for node", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(shares)
+}

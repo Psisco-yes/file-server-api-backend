@@ -929,3 +929,39 @@ func TestGetUserByID(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, notFoundUser)
 }
+
+func TestGetNodePath(t *testing.T) {
+	user := createTestUser(t, "user_path")
+	folderA := createTestNode(t, CreateNodeParams{ID: "path_A", OwnerID: user.ID, Name: "FolderA", NodeType: "folder"})
+	folderB := createTestNode(t, CreateNodeParams{ID: "path_B", OwnerID: user.ID, ParentID: &folderA.ID, Name: "FolderB", NodeType: "folder"})
+	fileC := createTestNode(t, CreateNodeParams{ID: "path_C", OwnerID: user.ID, ParentID: &folderB.ID, Name: "FileC.txt", NodeType: "file"})
+
+	path, err := testStore.GetNodePath(context.Background(), fileC.ID)
+
+	require.NoError(t, err)
+	require.Len(t, path, 2)
+	require.Equal(t, "FolderA", path[0].Name)
+	require.Equal(t, "FolderB", path[1].Name)
+
+	pathForRootFile, err := testStore.GetNodePath(context.Background(), folderA.ID)
+	require.NoError(t, err)
+	require.Len(t, pathForRootFile, 0, "Path for a node in root should be empty")
+}
+
+func TestGetSharesForNode(t *testing.T) {
+	sharer := createTestUser(t, "sharer_getshares")
+	recipient1 := createTestUser(t, "recipient1_getshares")
+	recipient2 := createTestUser(t, "recipient2_getshares")
+	node := createTestNode(t, CreateNodeParams{ID: "node_getshares", OwnerID: sharer.ID, Name: "SharedDoc.pdf", NodeType: "file"})
+
+	createTestShare(t, ShareNodeParams{NodeID: node.ID, SharerID: sharer.ID, RecipientID: recipient1.ID, Permissions: "read"})
+	createTestShare(t, ShareNodeParams{NodeID: node.ID, SharerID: sharer.ID, RecipientID: recipient2.ID, Permissions: "write"})
+
+	shares, err := testStore.GetSharesForNode(context.Background(), node.ID, sharer.ID)
+	require.NoError(t, err)
+	require.Len(t, shares, 2)
+	require.Equal(t, "recipient1_getshares", shares[0].RecipientUsername)
+	require.Equal(t, "read", shares[0].Permissions)
+	require.Equal(t, "recipient2_getshares", shares[1].RecipientUsername)
+	require.Equal(t, "write", shares[1].Permissions)
+}

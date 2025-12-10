@@ -1091,3 +1091,50 @@ func TestGetNodeHandler_Integration(t *testing.T) {
 		require.Equal(t, http.StatusNotFound, rr.Code)
 	})
 }
+
+func TestPathAndNodeShares_Integration(t *testing.T) {
+	userA := createTestUserWithPassword(t, "user_pathshare_a", "password")
+	userB := createTestUserWithPassword(t, "user_pathshare_b", "password")
+	loginA := loginUserForTest(t, "user_pathshare_a", "password")
+
+	folderA, _ := createTestNodeAPI(t, "FolderA", "folder", nil, userA.ID)
+	folderB, _ := createTestNodeAPI(t, "FolderB", "folder", &folderA.ID, userA.ID)
+	fileC, _ := createTestNodeAPI(t, "FileC.txt", "file", &folderB.ID, userA.ID)
+
+	_, err := testServer.store.ShareNode(context.Background(), database.ShareNodeParams{NodeID: fileC.ID, SharerID: userA.ID, RecipientID: userB.ID, Permissions: "read"})
+	require.NoError(t, err)
+
+	router := chi.NewRouter()
+	router.Use(testServer.AuthMiddleware)
+	router.Get("/api/v1/nodes/{nodeId}/path", testServer.GetNodePathHandler)
+	router.Get("/api/v1/nodes/{nodeId}/shares", testServer.GetNodeSharesHandler)
+
+	t.Run("get node path", func(t *testing.T) {
+		url := fmt.Sprintf("/api/v1/nodes/%s/path", fileC.ID)
+		req := httptest.NewRequest("GET", url, nil)
+		req.Header.Set("Authorization", "Bearer "+loginA.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusOK, rr.Code)
+		var path []models.Node
+		json.Unmarshal(rr.Body.Bytes(), &path)
+		require.Len(t, path, 2)
+		require.Equal(t, "FolderA", path[0].Name)
+		require.Equal(t, "FolderB", path[1].Name)
+	})
+
+	t.Run("get shares for a node", func(t *testing.T) {
+		url := fmt.Sprintf("/api/v1/nodes/%s/shares", fileC.ID)
+		req := httptest.NewRequest("GET", url, nil)
+		req.Header.Set("Authorization", "Bearer "+loginA.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusOK, rr.Code)
+		var shares []database.OutgoingShare
+		json.Unmarshal(rr.Body.Bytes(), &shares)
+		require.Len(t, shares, 1)
+		require.Equal(t, "user_pathshare_b", shares[0].RecipientUsername)
+	})
+}
