@@ -75,7 +75,6 @@ func main() {
 	r.Use(api.MetricsMiddleware)
 
 	r.Get("/swagger/*", httpSwagger.Handler(httpSwagger.URL("/swagger/doc.json")))
-	r.Get("/ws", server.ServeWsHandler)
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Serwer plików działa! Dokumentacja dostępna pod /swagger/index.html"))
 	})
@@ -83,6 +82,7 @@ func main() {
 	r.Get("/metrics", metricsHandler())
 
 	r.Route("/api/v1", func(r chi.Router) {
+		r.Get("/ws", server.ServeWsHandler)
 		r.Post("/auth/login", server.LoginHandler)
 		r.Post("/auth/refresh", server.RefreshTokenHandler)
 
