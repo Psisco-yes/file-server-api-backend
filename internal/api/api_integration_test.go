@@ -1096,10 +1096,11 @@ func TestPathAndNodeShares_Integration(t *testing.T) {
 	userA := createTestUserWithPassword(t, "user_pathshare_a", "password")
 	userB := createTestUserWithPassword(t, "user_pathshare_b", "password")
 	loginA := loginUserForTest(t, "user_pathshare_a", "password")
+	loginB := loginUserForTest(t, "user_pathshare_b", "password")
 
-	folderA, _ := createTestNodeAPI(t, "FolderA", "folder", nil, userA.ID)
-	folderB, _ := createTestNodeAPI(t, "FolderB", "folder", &folderA.ID, userA.ID)
-	fileC, _ := createTestNodeAPI(t, "FileC.txt", "file", &folderB.ID, userA.ID)
+	folderA, _ := createTestNodeAPI(t, "FolderA_path", "folder", nil, userA.ID)
+	folderB, _ := createTestNodeAPI(t, "FolderB_path", "folder", &folderA.ID, userA.ID)
+	fileC, _ := createTestNodeAPI(t, "FileC_path.txt", "file", &folderB.ID, userA.ID)
 
 	_, err := testServer.store.ShareNode(context.Background(), database.ShareNodeParams{NodeID: fileC.ID, SharerID: userA.ID, RecipientID: userB.ID, Permissions: "read"})
 	require.NoError(t, err)
@@ -1120,8 +1121,8 @@ func TestPathAndNodeShares_Integration(t *testing.T) {
 		var path []models.Node
 		json.Unmarshal(rr.Body.Bytes(), &path)
 		require.Len(t, path, 2)
-		require.Equal(t, "FolderA", path[0].Name)
-		require.Equal(t, "FolderB", path[1].Name)
+		require.Equal(t, "FolderA_path", path[0].Name)
+		require.Equal(t, "FolderB_path", path[1].Name)
 	})
 
 	t.Run("get shares for a node", func(t *testing.T) {
@@ -1136,5 +1137,81 @@ func TestPathAndNodeShares_Integration(t *testing.T) {
 		json.Unmarshal(rr.Body.Bytes(), &shares)
 		require.Len(t, shares, 1)
 		require.Equal(t, "user_pathshare_b", shares[0].RecipientUsername)
+	})
+
+	t.Run("non-owner cannot get shares for a node", func(t *testing.T) {
+		url := fmt.Sprintf("/api/v1/nodes/%s/shares", fileC.ID)
+		req := httptest.NewRequest("GET", url, nil)
+		req.Header.Set("Authorization", "Bearer "+loginB.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusNotFound, rr.Code)
+	})
+}
+
+func TestGetLatestEventHandler_Integration(t *testing.T) {
+	router := chi.NewRouter()
+	router.Use(testServer.AuthMiddleware)
+	router.Get("/api/v1/events/latest", testServer.GetLatestEventHandler)
+	router.Post("/api/v1/nodes/folder", testServer.CreateFolderHandler)
+	router.Get("/api/v1/events", testServer.GetEventsHandler)
+
+	t.Run("returns zero when no events exist", func(t *testing.T) {
+		username := "user_latest_event_empty"
+		password := "password123"
+		createTestUserWithPassword(t, username, password)
+		loginResp := loginUserForTest(t, username, password)
+
+		req := httptest.NewRequest("GET", "/api/v1/events/latest", nil)
+		req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusOK, rr.Code)
+		var resp LatestEventResponse
+		err := json.Unmarshal(rr.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		require.Equal(t, int64(0), resp.LatestEventID, "LatestEventID should be 0 for a user with no events")
+	})
+
+	t.Run("returns the ID of the last event", func(t *testing.T) {
+		username := "user_latest_event_filled"
+		password := "password123"
+		createTestUserWithPassword(t, username, password)
+		loginResp := loginUserForTest(t, username, password)
+
+		for i := 0; i < 3; i++ {
+			createFolderReq := CreateFolderRequest{Name: fmt.Sprintf("FolderForEvent_%d", i)}
+			body, _ := json.Marshal(createFolderReq)
+			reqCreate := httptest.NewRequest("POST", "/api/v1/nodes/folder", bytes.NewReader(body))
+			reqCreate.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+			rrCreate := httptest.NewRecorder()
+			router.ServeHTTP(rrCreate, reqCreate)
+			require.Equal(t, http.StatusCreated, rrCreate.Code)
+		}
+
+		req := httptest.NewRequest("GET", "/api/v1/events/latest", nil)
+		req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusOK, rr.Code)
+		var resp LatestEventResponse
+		err := json.Unmarshal(rr.Body.Bytes(), &resp)
+		require.NoError(t, err)
+
+		require.Greater(t, resp.LatestEventID, int64(0), "LatestEventID should be greater than 0")
+
+		reqAllEvents := httptest.NewRequest("GET", "/api/v1/events?since=0", nil)
+		reqAllEvents.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rrAllEvents := httptest.NewRecorder()
+		router.ServeHTTP(rrAllEvents, reqAllEvents)
+
+		require.Equal(t, http.StatusOK, rrAllEvents.Code, "Verification request for all events should succeed")
+		var allEvents []database.Event
+		json.Unmarshal(rrAllEvents.Body.Bytes(), &allEvents)
+
+		require.Equal(t, allEvents[len(allEvents)-1].ID, resp.LatestEventID, "LatestEventID should match the ID of the last event in the list")
 	})
 }

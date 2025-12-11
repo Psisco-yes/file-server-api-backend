@@ -48,3 +48,29 @@ func (s *Server) GetEventsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(events)
 }
+
+type LatestEventResponse struct {
+	LatestEventID int64 `json:"latest_event_id" example:"12345"`
+}
+
+// @Summary      Get latest event ID
+// @Description  Retrieves the ID of the most recent event for the authenticated user. This is useful for clients to get an initial synchronization point after building their cache from scratch.
+// @Tags         events
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {object}  LatestEventResponse
+// @Failure      401  {string}  string "Unauthorized"
+// @Failure      500  {string}  string "Internal Server Error"
+// @Router       /events/latest [get]
+func (s *Server) GetLatestEventHandler(w http.ResponseWriter, r *http.Request) {
+	claims := GetUserFromContext(r.Context())
+
+	latestID, err := s.store.GetLatestEventID(r.Context(), claims.UserID)
+	if err != nil {
+		http.Error(w, "Failed to retrieve latest event ID", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(LatestEventResponse{LatestEventID: latestID})
+}

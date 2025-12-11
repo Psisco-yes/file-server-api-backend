@@ -40,6 +40,12 @@ definitions:
       payload:
         type: object
     type: object
+  internal_api.LatestEventResponse:
+    properties:
+      latest_event_id:
+        example: 12345
+        type: integer
+    type: object
   internal_api.LoginRequest:
     properties:
       password:
@@ -362,6 +368,31 @@ paths:
       security:
       - BearerAuth: []
       summary: Get new events
+      tags:
+      - events
+  /events/latest:
+    get:
+      description: Retrieves the ID of the most recent event for the authenticated
+        user. This is useful for clients to get an initial synchronization point after
+        building their cache from scratch.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api.LatestEventResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Get latest event ID
       tags:
       - events
   /favorites:
@@ -844,6 +875,42 @@ paths:
       summary: Add a node to favorites
       tags:
       - favorites
+  /nodes/{nodeId}/path:
+    get:
+      description: Retrieves the hierarchical path (ancestors) for a given node, from
+        the root down to the node's parent.
+      parameters:
+      - description: The ID of the node
+        in: path
+        name: nodeId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_api.NodeResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Get node path (breadcrumbs)
+      tags:
+      - nodes
   /nodes/{nodeId}/restore:
     post:
       description: Restores a file or folder from the trash to its original location.
@@ -929,6 +996,42 @@ paths:
       security:
       - BearerAuth: []
       summary: Share a node
+      tags:
+      - shares
+  /nodes/{nodeId}/shares:
+    get:
+      description: Retrieves a list of all users a specific node has been shared with.
+        Only the owner of the node can perform this action.
+      parameters:
+      - description: The ID of the node
+        in: path
+        name: nodeId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_api.OutgoingShareResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "404":
+          description: Not Found - Node not found or you are not the owner
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Get shares for a specific node
       tags:
       - shares
   /nodes/archive:

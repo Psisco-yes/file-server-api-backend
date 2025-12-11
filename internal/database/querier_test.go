@@ -476,12 +476,21 @@ func TestDeleteAndGetShareByID(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, foundShare)
 
-	err = testStore.DeleteShare(context.Background(), share.ID, sharer.ID)
+	success, err := testStore.DeleteShare(context.Background(), share.ID, otherUser.ID)
 	require.NoError(t, err)
+	require.False(t, success, "Should not be able to delete another user's share")
+
+	success, err = testStore.DeleteShare(context.Background(), share.ID, sharer.ID)
+	require.NoError(t, err)
+	require.True(t, success, "Should successfully delete the share")
 
 	foundShare, err = testStore.GetShareByID(context.Background(), share.ID, sharer.ID)
 	require.NoError(t, err)
 	require.Nil(t, foundShare)
+
+	success, err = testStore.DeleteShare(context.Background(), share.ID, sharer.ID)
+	require.NoError(t, err)
+	require.False(t, success, "Should return false when trying to delete a non-existent share")
 }
 
 func TestGetUserByUsername(t *testing.T) {

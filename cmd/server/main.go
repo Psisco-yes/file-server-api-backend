@@ -135,8 +135,12 @@ func main() {
 				r.Delete("/purge", server.PurgeTrashHandler)
 			})
 
+			r.Route("/events", func(r chi.Router) {
+				r.Get("/", server.GetEventsHandler)
+				r.Get("/latest", server.GetLatestEventHandler)
+			})
+
 			r.Get("/favorites", server.ListFavoritesHandler)
-			r.Get("/events", server.GetEventsHandler)
 			r.Get("/search", server.SearchHandler)
 		})
 	})

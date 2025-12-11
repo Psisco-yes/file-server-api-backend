@@ -304,9 +304,13 @@ func (s *Server) DeleteShareHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	txErr := s.store.ExecTx(r.Context(), func(q *database.Queries) error {
-		err := q.DeleteShare(r.Context(), shareID, claims.UserID)
+		success, err := q.DeleteShare(r.Context(), shareID, claims.UserID)
 		if err != nil {
 			return err
+		}
+
+		if !success {
+			return errors.New("failed to delete share, it might have been deleted already")
 		}
 
 		payloadForRecipient := map[string]string{"node_id": shareInfo.NodeID}

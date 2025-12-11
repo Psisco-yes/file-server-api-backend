@@ -77,7 +77,7 @@ func (s *Server) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		UserID:       user.ID,
 		RefreshToken: refreshToken,
 		UserAgent:    r.UserAgent(),
-		ClientIP:     r.RemoteAddr,
+		ClientIP:     getClientIP(r),
 		ExpiresAt:    expiresAt,
 	}
 
@@ -148,7 +148,7 @@ func (s *Server) RefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
 			UserID:       user.ID,
 			RefreshToken: newRefreshToken,
 			UserAgent:    r.UserAgent(),
-			ClientIP:     r.RemoteAddr,
+			ClientIP:     getClientIP(r),
 			ExpiresAt:    time.Now().Add(24 * time.Hour),
 		}
 		return q.CreateSession(r.Context(), sessionParams)

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"serwer-plikow/internal/auth"
 	"strconv"
@@ -70,4 +71,20 @@ func parsePagination(r *http.Request) (limit, offset int) {
 	}
 
 	return limit, offset
+}
+
+func getClientIP(r *http.Request) string {
+	ip := r.Header.Get("X-Forwarded-For")
+	if ip != "" {
+		parts := strings.Split(ip, ",")
+		return strings.TrimSpace(parts[0])
+	}
+
+	ip = r.Header.Get("X-Real-IP")
+	if ip != "" {
+		return ip
+	}
+
+	ip, _, _ = net.SplitHostPort(r.RemoteAddr)
+	return ip
 }

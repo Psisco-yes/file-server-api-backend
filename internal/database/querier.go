@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type DBTX interface {
@@ -381,10 +382,13 @@ func (q *Queries) GetOutgoingShares(ctx context.Context, sharerID int64, limit i
 	return shares, nil
 }
 
-func (q *Queries) DeleteShare(ctx context.Context, shareID int64, sharerID int64) error {
+func (q *Queries) DeleteShare(ctx context.Context, shareID int64, sharerID int64) (bool, error) {
 	query := `DELETE FROM shares WHERE id = $1 AND sharer_id = $2`
-	_, err := q.db.Exec(ctx, query, shareID, sharerID)
-	return err
+	res, err := q.db.Exec(ctx, query, shareID, sharerID)
+	if err != nil {
+		return false, err
+	}
+	return res.RowsAffected() > 0, nil
 }
 
 func (q *Queries) GetShareByID(ctx context.Context, shareID int64, sharerID int64) (*models.Share, error) {
@@ -562,8 +566,8 @@ func (q *Queries) GetNodeByID(ctx context.Context, id string, ownerID int64) (*m
 }
 
 func (q *Queries) MoveNodeToTrash(ctx context.Context, id string, ownerID int64) (bool, error) {
-	query := `
-		WITH RECURSIVE nodes_to_delete AS (
+	findQuery := `
+		WITH RECURSIVE nodes_to_process AS (
 			SELECT n.id
 			FROM nodes n
 			WHERE n.id = $1 AND n.owner_id = $2 AND n.deleted_at IS NULL
@@ -572,23 +576,42 @@ func (q *Queries) MoveNodeToTrash(ctx context.Context, id string, ownerID int64)
 			
 			SELECT n.id
 			FROM nodes n
-			INNER JOIN nodes_to_delete ntd ON n.parent_id = ntd.id
+			INNER JOIN nodes_to_process ntp ON n.parent_id = ntp.id
 		)
-		UPDATE nodes
-		SET 
-			deleted_at = $3,
-			original_parent_id = parent_id,
-			parent_id = NULL
-		WHERE id IN (SELECT id FROM nodes_to_delete)
+		SELECT id FROM nodes_to_process
 	`
-
-	now := time.Now()
-	res, err := q.db.Exec(ctx, query, id, ownerID, now)
+	rows, err := q.db.Query(ctx, findQuery, id, ownerID)
+	if err != nil {
+		return false, err
+	}
+	nodeIDs, err := pgx.CollectRows(rows, pgx.RowTo[string])
 	if err != nil {
 		return false, err
 	}
 
-	return res.RowsAffected() > 0, nil
+	if len(nodeIDs) == 0 {
+		return false, nil
+	}
+
+	now := time.Now()
+
+	updateQuery := `
+		UPDATE nodes
+		SET deleted_at = $1, original_parent_id = parent_id, parent_id = NULL
+		WHERE id = ANY($2)
+	`
+	_, err = q.db.Exec(ctx, updateQuery, now, nodeIDs)
+	if err != nil {
+		return false, err
+	}
+
+	deleteSharesQuery := `DELETE FROM shares WHERE node_id = ANY($1)`
+	_, err = q.db.Exec(ctx, deleteSharesQuery, nodeIDs)
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
 }
 
 func (q *Queries) UpdateUserStorage(ctx context.Context, userID int64, bytesChange int64) error {
@@ -1195,4 +1218,20 @@ func (q *Queries) GetSharesForNode(ctx context.Context, nodeID string, ownerID i
 	}
 
 	return shares, nil
+}
+
+func (q *Queries) GetLatestEventID(ctx context.Context, userID int64) (int64, error) {
+	query := `SELECT MAX(id) FROM event_journal WHERE user_id = $1`
+
+	var latestID pgtype.Int8
+	err := q.db.QueryRow(ctx, query, userID).Scan(&latestID)
+	if err != nil {
+		return 0, err
+	}
+
+	if !latestID.Valid {
+		return 0, nil
+	}
+
+	return latestID.Int64, nil
 }

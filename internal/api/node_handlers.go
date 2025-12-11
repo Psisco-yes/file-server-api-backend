@@ -1062,13 +1062,11 @@ func (s *Server) CopyNodeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for _, copiedNode := range allCopiedNodes {
-		eventMsg := map[string]interface{}{"event_type": "node_copied", "payload": copiedNode}
-		eventBytes, err := json.Marshal(eventMsg)
-		if err != nil {
-			log.Printf("CRITICAL: Failed to marshal WebSocket event for copied node %s: %v", copiedNode.ID, err)
-			continue
-		}
+	eventMsg := map[string]interface{}{"event_type": "nodes_copied", "payload": allCopiedNodes}
+	eventBytes, err := json.Marshal(eventMsg)
+	if err != nil {
+		log.Printf("CRITICAL: Failed to marshal WebSocket event for copied nodes: %v", err)
+	} else {
 		s.wsHub.PublishEvent(claims.UserID, eventBytes)
 		if claims.UserID != destOwnerID {
 			s.wsHub.PublishEvent(destOwnerID, eventBytes)

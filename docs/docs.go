@@ -173,6 +173,43 @@ const docTemplate = `{
                 }
             }
         },
+        "/events/latest": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieves the ID of the most recent event for the authenticated user. This is useful for clients to get an initial synchronization point after building their cache from scratch.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "Get latest event ID",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.LatestEventResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/favorites": {
             "get": {
                 "security": [
@@ -1106,6 +1143,61 @@ const docTemplate = `{
                 }
             }
         },
+        "/nodes/{nodeId}/path": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieves the hierarchical path (ancestors) for a given node, from the root down to the node's parent.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "nodes"
+                ],
+                "summary": "Get node path (breadcrumbs)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "The ID of the node",
+                        "name": "nodeId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/internal_api.NodeResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/nodes/{nodeId}/restore": {
             "post": {
                 "security": [
@@ -1224,6 +1316,61 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "Conflict - Node is already shared with this user",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/nodes/{nodeId}/shares": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieves a list of all users a specific node has been shared with. Only the owner of the node can perform this action.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "shares"
+                ],
+                "summary": "Get shares for a specific node",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "The ID of the node",
+                        "name": "nodeId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/internal_api.OutgoingShareResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found - Node not found or you are not the owner",
                         "schema": {
                             "type": "string"
                         }
@@ -1809,6 +1956,15 @@ const docTemplate = `{
                 },
                 "payload": {
                     "type": "object"
+                }
+            }
+        },
+        "internal_api.LatestEventResponse": {
+            "type": "object",
+            "properties": {
+                "latest_event_id": {
+                    "type": "integer",
+                    "example": 12345
                 }
             }
         },
