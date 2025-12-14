@@ -1,5 +1,5 @@
 # Deletes a user and all of their physical files from storage.
-# USAGE: .\scripts\delete-user.ps1 -Username "user_to_delete"
+# USAGE: .\delete-user.ps1 -Username "user_to_delete"
 
 param (
     [Parameter(Mandatory=$true)]
@@ -9,7 +9,7 @@ param (
 Write-Host "Starting deletion process for user: $Username" -ForegroundColor Yellow
 
 Write-Host "Fetching list of files owned by the user..."
-$fileIdsContent = Get-Content -Path ".\scripts\sql\getfilesforuser.sql" -Raw | docker exec -i fileserver_db psql -U fileserver -d fileserver_db `
+$fileIdsContent = Get-Content -Path ".\sql\getfilesforuser.sql" -Raw | docker exec -i fileserver_db psql -U fileserver -d fileserver_db `
     -v username="$Username" | Out-String
 
 if ($LASTEXITCODE -ne 0) {
@@ -57,7 +57,7 @@ if ($fileIdArray.Count -gt 0) {
 }
 
 Write-Host "Deleting user '$Username' from the database..."
-Get-Content -Path ".\scripts\sql\deleteuser.sql" -Raw | docker exec -i fileserver_db psql -U fileserver -d fileserver_db `
+Get-Content -Path ".\sql\deleteuser.sql" -Raw | docker exec -i fileserver_db psql -U fileserver -d fileserver_db `
     -v username="$Username" | Out-String
 
 if ($LASTEXITCODE -ne 0) {
