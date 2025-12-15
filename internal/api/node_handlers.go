@@ -13,29 +13,11 @@ import (
 	"serwer-plikow/internal/database"
 	"serwer-plikow/internal/models"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jaevor/go-nanoid"
 )
-
-type CreateFolderRequest struct {
-	Name     string  `json:"name" example:"Nowy Folder"`
-	ParentID *string `json:"parent_id,omitempty" example:"_vx2a-43VqRT5wz_s9u4"`
-}
-
-type NodeResponse struct {
-	ID         string    `json:"id" example:"_vx2a-43VqRT5wz_s9u4"`
-	OwnerID    int64     `json:"owner_id" example:"1"`
-	ParentID   *string   `json:"parent_id,omitempty" example:"fLW5kAh2ia9vYmjMnU4nZ"`
-	Name       string    `json:"name" example:"Raport_Q3.docx"`
-	NodeType   string    `json:"node_type" example:"file"`
-	SizeBytes  *int64    `json:"size_bytes,omitempty" example:"123456"`
-	MimeType   *string   `json:"mime_type,omitempty" example:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"`
-	CreatedAt  time.Time `json:"created_at"`
-	ModifiedAt time.Time `json:"modified_at"`
-}
 
 func (s *Server) generateUniqueID(ctx context.Context) (string, error) {
 	maxRetries := 10
@@ -538,11 +520,6 @@ func (s *Server) DeleteNodeHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-type UpdateNodeRequest struct {
-	Name     *string `json:"name,omitempty" example:"Nowa Nazwa Pliku"`
-	ParentID *string `json:"parent_id,omitempty" example:"bNowyFolderRodzic123"`
-}
-
 // @Summary      Update a node
 // @Description  Updates a node's properties, such as its name or parent folder. To move a node to the root directory, provide "root" as the parent_id. Moving nodes between different owners is not allowed. Requires write permission in the source and target folders.
 // @Tags         nodes
@@ -862,11 +839,6 @@ func (s *Server) DownloadArchiveHandler(w http.ResponseWriter, r *http.Request) 
 			fileStream.Close()
 		}
 	}
-}
-
-type CopyNodeRequest struct {
-	ParentID string  `json:"parent_id" example:"target_folder_id"`
-	NewName  *string `json:"new_name,omitempty" example:"Kopia Raportu"`
 }
 
 // @Summary      Copy a node

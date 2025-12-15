@@ -13,16 +13,6 @@ import (
 	"github.com/jaevor/go-nanoid"
 )
 
-type LoginRequest struct {
-	Username string `json:"username" example:"admin"`
-	Password string `json:"password" example:"password123"`
-}
-
-type TokenResponse struct {
-	AccessToken  string `json:"access_token" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJ1c2VybmFtZSI6ImFkbWluIiwiZXhwIjoxNjE2NDI2NzY2fQ...."`
-	RefreshToken string `json:"refresh_token" example:"V1StGXR8_Z5jdHi6B-myT78q_Z5jdHi6B-myT78q"`
-}
-
 // @Summary      Logs a user in
 // @Description  Authenticates a user and returns a short-lived access token and a long-lived refresh token.
 // @Tags         auth
@@ -93,10 +83,6 @@ func (s *Server) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 	})
-}
-
-type RefreshTokenRequest struct {
-	RefreshToken string `json:"refresh_token" example:"V1StGXR8_Z5jdHi6B-myT78q_Z5jdHi6B-myT78q"`
 }
 
 // @Summary      Refresh access token

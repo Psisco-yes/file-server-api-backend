@@ -4,15 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
-	"time"
 )
-
-type EventResponse struct {
-	ID        int64           `json:"id" example:"123"`
-	EventType string          `json:"event_type" example:"node_created"`
-	EventTime time.Time       `json:"event_time"`
-	Payload   json.RawMessage `json:"payload" swaggertype:"object"`
-}
 
 // @Summary      Get new events
 // @Description  Retrieves a list of events that have occurred since a given event ID. Used for client-side cache synchronization.
@@ -47,10 +39,6 @@ func (s *Server) GetEventsHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(events)
-}
-
-type LatestEventResponse struct {
-	LatestEventID int64 `json:"latest_event_id" example:"12345"`
 }
 
 // @Summary      Get latest event ID

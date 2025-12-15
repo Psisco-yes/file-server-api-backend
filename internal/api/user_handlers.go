@@ -36,11 +36,6 @@ func (s *Server) GetCurrentUserHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(user)
 }
 
-type StorageUsageResponse struct {
-	UsedBytes  int64 `json:"used_bytes"`
-	QuotaBytes int64 `json:"quota_bytes"`
-}
-
 // @Summary      Get storage usage
 // @Description  Retrieves the current storage usage and quota for the authenticated user.
 // @Tags         users
@@ -71,11 +66,6 @@ func (s *Server) GetStorageUsageHandler(w http.ResponseWriter, r *http.Request) 
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
-}
-
-type ChangePasswordRequest struct {
-	OldPassword string `json:"old_password" example:"password123"`
-	NewPassword string `json:"new_password" example:"newStrongPassword456"`
 }
 
 // @Summary      Change current user's password
@@ -134,10 +124,6 @@ func (s *Server) ChangePasswordHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
-}
-
-type UpdateMeRequest struct {
-	DisplayName *string `json:"display_name,omitempty" example:"Jan Kowalski"`
 }
 
 // @Summary      Update current user's profile
