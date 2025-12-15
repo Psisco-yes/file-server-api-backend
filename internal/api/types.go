@@ -90,3 +90,14 @@ type NodeDetailResponse struct {
 	Path   []*models.RichNode      `json:"path"`
 	Shares []OutgoingShareResponse `json:"shares,omitempty"`
 }
+
+type InitiateUploadRequest struct {
+	ParentID *string `json:"parent_id,omitempty"`
+	Name     string  `json:"name"`
+	MimeType string  `json:"mime_type"`
+	Size     int64   `json:"size"`
+}
+
+type InitiateUploadResponse struct {
+	UploadID string `json:"upload_id"`
+}

@@ -1087,3 +1087,65 @@ func TestSearchRichNodes(t *testing.T) {
 	require.True(t, foundNames["Mój Dokument A"])
 	require.True(t, foundNames["Wspólny Dokument B"])
 }
+
+func TestUploadQueries(t *testing.T) {
+	user := createTestUser(t, "user_for_upload_queries")
+	parentFolder := createTestNode(t, CreateNodeParams{ID: "upload_parent_folder", OwnerID: user.ID, Name: "Uploads", NodeType: "folder"})
+
+	uploadID := uuid.New()
+	nodeID := "upload_test_node_id"
+	var totalSize int64 = 1024 * 1024
+
+	createParams := CreateUploadParams{
+		ID:             uploadID,
+		NodeID:         nodeID,
+		OwnerID:        user.ID,
+		ParentID:       &parentFolder.ID,
+		Name:           "test_upload.dat",
+		MimeType:       "application/octet-stream",
+		TotalSizeBytes: totalSize,
+	}
+
+	t.Run("CreateUpload", func(t *testing.T) {
+		err := testStore.CreateUpload(context.Background(), createParams)
+		require.NoError(t, err)
+
+		var foundID uuid.UUID
+		query := "SELECT id FROM uploads WHERE id = $1"
+		err = testStore.pool.QueryRow(context.Background(), query, uploadID).Scan(&foundID)
+		require.NoError(t, err)
+		require.Equal(t, uploadID, foundID)
+	})
+
+	t.Run("GetUploadByID", func(t *testing.T) {
+		upload, err := testStore.GetUploadByID(context.Background(), uploadID)
+		require.NoError(t, err)
+		require.NotNil(t, upload)
+
+		require.Equal(t, uploadID, upload.ID)
+		require.Equal(t, nodeID, upload.NodeID)
+		require.Equal(t, user.ID, upload.OwnerID)
+		require.Equal(t, totalSize, upload.TotalSizeBytes)
+		require.Equal(t, int64(0), upload.UploadedBytes)
+	})
+
+	t.Run("UpdateUploadProgress", func(t *testing.T) {
+		var newUploadedBytes int64 = 512 * 1024
+		err := testStore.UpdateUploadProgress(context.Background(), uploadID, newUploadedBytes)
+		require.NoError(t, err)
+
+		upload, err := testStore.GetUploadByID(context.Background(), uploadID)
+		require.NoError(t, err)
+		require.NotNil(t, upload)
+		require.Equal(t, newUploadedBytes, upload.UploadedBytes)
+	})
+
+	t.Run("DeleteUpload", func(t *testing.T) {
+		err := testStore.DeleteUpload(context.Background(), uploadID)
+		require.NoError(t, err)
+
+		upload, err := testStore.GetUploadByID(context.Background(), uploadID)
+		require.NoError(t, err)
+		require.Nil(t, upload, "Upload session should be nil after deletion")
+	})
+}

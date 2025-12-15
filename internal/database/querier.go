@@ -1589,3 +1589,62 @@ func (q *Queries) findAvailableName(ctx context.Context, ownerID int64, parentID
 	}
 	return "", fmt.Errorf("could not find an available name for %s after 99 attempts", originalName)
 }
+
+type CreateUploadParams struct {
+	ID             uuid.UUID
+	NodeID         string
+	OwnerID        int64
+	ParentID       *string
+	Name           string
+	MimeType       string
+	TotalSizeBytes int64
+}
+
+func (q *Queries) CreateUpload(ctx context.Context, arg CreateUploadParams) error {
+	query := `
+		INSERT INTO uploads (id, node_id, owner_id, parent_id, name, mime_type, total_size_bytes)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`
+	_, err := q.db.Exec(ctx, query, arg.ID, arg.NodeID, arg.OwnerID, arg.ParentID, arg.Name, arg.MimeType, arg.TotalSizeBytes)
+	return err
+}
+
+type Upload struct {
+	ID             uuid.UUID
+	NodeID         string
+	OwnerID        int64
+	ParentID       *string
+	Name           string
+	MimeType       string
+	TotalSizeBytes int64
+	UploadedBytes  int64
+	CreatedAt      time.Time
+}
+
+func (q *Queries) GetUploadByID(ctx context.Context, uploadID uuid.UUID) (*Upload, error) {
+	query := `SELECT id, node_id, owner_id, parent_id, name, mime_type, total_size_bytes, uploaded_bytes, created_at FROM uploads WHERE id = $1`
+	var upload Upload
+	err := q.db.QueryRow(ctx, query, uploadID).Scan(
+		&upload.ID, &upload.NodeID, &upload.OwnerID, &upload.ParentID, &upload.Name,
+		&upload.MimeType, &upload.TotalSizeBytes, &upload.UploadedBytes, &upload.CreatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &upload, nil
+}
+
+func (q *Queries) UpdateUploadProgress(ctx context.Context, uploadID uuid.UUID, uploadedBytes int64) error {
+	query := `UPDATE uploads SET uploaded_bytes = $1 WHERE id = $2`
+	_, err := q.db.Exec(ctx, query, uploadedBytes, uploadID)
+	return err
+}
+
+func (q *Queries) DeleteUpload(ctx context.Context, uploadID uuid.UUID) error {
+	query := `DELETE FROM uploads WHERE id = $1`
+	_, err := q.db.Exec(ctx, query, uploadID)
+	return err
+}

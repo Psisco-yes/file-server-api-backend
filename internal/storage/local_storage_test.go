@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -135,4 +136,63 @@ func TestLocalStorage_Copy_SourceNotFound(t *testing.T) {
 
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "source file for copy not found")
+}
+
+func TestLocalStorage_Append(t *testing.T) {
+	tempDir := t.TempDir()
+	storage, err := NewLocalStorage(tempDir)
+	require.NoError(t, err)
+
+	id := "append_test_id"
+	filePath := storage.getPathFromID(id)
+
+	err = storage.Save(id, strings.NewReader(""))
+	require.NoError(t, err)
+
+	chunk1 := "Pierwsza część."
+	chunk2 := "Druga część."
+
+	err = storage.Append(id, 0, strings.NewReader(chunk1))
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(filePath)
+	require.NoError(t, err)
+	require.Equal(t, chunk1, string(content))
+
+	offset := int64(len(chunk1))
+	err = storage.Append(id, offset, strings.NewReader(chunk2))
+	require.NoError(t, err)
+
+	content, err = os.ReadFile(filePath)
+	require.NoError(t, err)
+	require.Equal(t, chunk1+chunk2, string(content))
+}
+
+func TestLocalStorage_Move(t *testing.T) {
+	tempDir := t.TempDir()
+	storage, err := NewLocalStorage(tempDir)
+	require.NoError(t, err)
+
+	sourceContent := "Ten plik zostanie przeniesiony."
+	sourceID := "source_move_id"
+	destID := "dest_move_id"
+
+	sourcePath := filepath.Join(storage.GetBasePath(), "tmp", sourceID)
+	err = os.WriteFile(sourcePath, []byte(sourceContent), 0644)
+	require.NoError(t, err)
+
+	err = storage.Move(sourcePath, destID)
+	require.NoError(t, err)
+
+	_, err = os.Stat(sourcePath)
+	require.Error(t, err)
+	require.True(t, os.IsNotExist(err))
+
+	destPath := storage.getPathFromID(destID)
+	_, err = os.Stat(destPath)
+	require.NoError(t, err, "Destination file should exist")
+
+	content, err := os.ReadFile(destPath)
+	require.NoError(t, err)
+	require.Equal(t, sourceContent, string(content))
 }

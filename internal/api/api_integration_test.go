@@ -1627,3 +1627,148 @@ func TestListSharedNodesHandler_SortingAndPagination(t *testing.T) {
 		runSharedSortTest(t, url, []string{"Z_File.txt"})
 	})
 }
+
+func TestChunkedUpload_Integration(t *testing.T) {
+	router := chi.NewRouter()
+	router.Use(testServer.AuthMiddleware)
+	router.Post("/api/v1/nodes/upload/initiate", testServer.InitiateUploadHandler)
+	router.Patch("/api/v1/nodes/upload/{uploadId}", testServer.UploadChunkHandler)
+	router.Post("/api/v1/nodes/upload/{uploadId}/complete", testServer.CompleteUploadHandler)
+
+	t.Run("successful upload of a small file in two chunks", func(t *testing.T) {
+		createTestUserWithPassword(t, "user_chunk_success", "password")
+		loginResp := loginUserForTest(t, "user_chunk_success", "password")
+
+		fileContent := "This is the full content of the file we are uploading."
+		fileSize := int64(len(fileContent))
+		fileName := "successful_upload.txt"
+
+		initReqPayload := InitiateUploadRequest{
+			Name: fileName, Size: fileSize, MimeType: "text/plain",
+		}
+		body, _ := json.Marshal(initReqPayload)
+		reqInit := httptest.NewRequest("POST", "/api/v1/nodes/upload/initiate", bytes.NewReader(body))
+		reqInit.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rrInit := httptest.NewRecorder()
+		router.ServeHTTP(rrInit, reqInit)
+		require.Equal(t, http.StatusCreated, rrInit.Code)
+
+		var initResp InitiateUploadResponse
+		err := json.Unmarshal(rrInit.Body.Bytes(), &initResp)
+		require.NoError(t, err)
+		require.NotEmpty(t, initResp.UploadID)
+		uploadID, err := uuid.Parse(initResp.UploadID)
+		require.NoError(t, err)
+
+		chunk1 := fileContent[:15]
+		chunk2 := fileContent[15:]
+
+		reqChunk1 := httptest.NewRequest("PATCH", "/api/v1/nodes/upload/"+uploadID.String(), strings.NewReader(chunk1))
+		reqChunk1.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		reqChunk1.Header.Set("Content-Range", fmt.Sprintf("bytes 0-%d/%d", len(chunk1)-1, fileSize))
+		rrChunk1 := httptest.NewRecorder()
+		router.ServeHTTP(rrChunk1, reqChunk1)
+		require.Equal(t, http.StatusNoContent, rrChunk1.Code)
+
+		reqChunk2 := httptest.NewRequest("PATCH", "/api/v1/nodes/upload/"+uploadID.String(), strings.NewReader(chunk2))
+		reqChunk2.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		reqChunk2.Header.Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", len(chunk1), fileSize-1, fileSize))
+		rrChunk2 := httptest.NewRecorder()
+		router.ServeHTTP(rrChunk2, reqChunk2)
+		require.Equal(t, http.StatusNoContent, rrChunk2.Code)
+
+		reqComplete := httptest.NewRequest("POST", "/api/v1/nodes/upload/"+uploadID.String()+"/complete", nil)
+		reqComplete.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rrComplete := httptest.NewRecorder()
+		router.ServeHTTP(rrComplete, reqComplete)
+		require.Equal(t, http.StatusCreated, rrComplete.Code)
+
+		var finalNode models.RichNode
+		err = json.Unmarshal(rrComplete.Body.Bytes(), &finalNode)
+		require.NoError(t, err)
+
+		require.Equal(t, fileName, finalNode.Name)
+		require.Equal(t, fileSize, *finalNode.SizeBytes)
+
+		reader, err := testServer.storage.Get(finalNode.ID)
+		require.NoError(t, err)
+		defer reader.Close()
+		retrievedContent, _ := io.ReadAll(reader)
+		require.Equal(t, string(fileContent), string(retrievedContent))
+
+		uploadSession, err := testServer.store.GetUploadByID(context.Background(), uploadID)
+		require.NoError(t, err)
+		require.Nil(t, uploadSession)
+	})
+
+	t.Run("initiate fails on quota exceeded", func(t *testing.T) {
+		user := createTestUserWithPassword(t, "user_chunk_quota", "password")
+		loginResp := loginUserForTest(t, "user_chunk_quota", "password")
+
+		var smallQuota int64 = 50
+		_, err := testServer.store.GetPool().Exec(context.Background(), "UPDATE users SET storage_quota_bytes = $1, storage_used_bytes = 0 WHERE id = $2", smallQuota, user.ID)
+		require.NoError(t, err)
+
+		initReqPayload := InitiateUploadRequest{Name: "too_big.txt", Size: 100}
+		body, _ := json.Marshal(initReqPayload)
+		reqInit := httptest.NewRequest("POST", "/api/v1/nodes/upload/initiate", bytes.NewReader(body))
+		reqInit.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rrInit := httptest.NewRecorder()
+		router.ServeHTTP(rrInit, reqInit)
+
+		require.Equal(t, http.StatusRequestEntityTooLarge, rrInit.Code)
+	})
+
+	t.Run("upload chunk fails on wrong byte offset", func(t *testing.T) {
+		createTestUserWithPassword(t, "user_chunk_offset", "password")
+		loginResp := loginUserForTest(t, "user_chunk_offset", "password")
+
+		initReqPayload := InitiateUploadRequest{Name: "wrong_offset.txt", Size: 100}
+		body, _ := json.Marshal(initReqPayload)
+		reqInit := httptest.NewRequest("POST", "/api/v1/nodes/upload/initiate", bytes.NewReader(body))
+		reqInit.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rrInit := httptest.NewRecorder()
+		router.ServeHTTP(rrInit, reqInit)
+		require.Equal(t, http.StatusCreated, rrInit.Code)
+		var initResp InitiateUploadResponse
+		json.Unmarshal(rrInit.Body.Bytes(), &initResp)
+		uploadID := initResp.UploadID
+
+		reqChunk := httptest.NewRequest("PATCH", "/api/v1/nodes/upload/"+uploadID, strings.NewReader("some data"))
+		reqChunk.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		reqChunk.Header.Set("Content-Range", "bytes 10-18/100")
+		rrChunk := httptest.NewRecorder()
+		router.ServeHTTP(rrChunk, reqChunk)
+
+		require.Equal(t, http.StatusRequestedRangeNotSatisfiable, rrChunk.Code)
+	})
+
+	t.Run("complete fails if upload is incomplete", func(t *testing.T) {
+		createTestUserWithPassword(t, "user_chunk_incomplete", "password")
+		loginResp := loginUserForTest(t, "user_chunk_incomplete", "password")
+
+		initReqPayload := InitiateUploadRequest{Name: "incomplete.txt", Size: 1000}
+		body, _ := json.Marshal(initReqPayload)
+		reqInit := httptest.NewRequest("POST", "/api/v1/nodes/upload/initiate", bytes.NewReader(body))
+		reqInit.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rrInit := httptest.NewRecorder()
+		router.ServeHTTP(rrInit, reqInit)
+		require.Equal(t, http.StatusCreated, rrInit.Code)
+		var initResp InitiateUploadResponse
+		json.Unmarshal(rrInit.Body.Bytes(), &initResp)
+		uploadID := initResp.UploadID
+
+		reqChunk := httptest.NewRequest("PATCH", "/api/v1/nodes/upload/"+uploadID, strings.NewReader("some data"))
+		reqChunk.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		reqChunk.Header.Set("Content-Range", "bytes 0-8/1000")
+		router.ServeHTTP(httptest.NewRecorder(), reqChunk)
+
+		reqComplete := httptest.NewRequest("POST", "/api/v1/nodes/upload/"+uploadID+"/complete", nil)
+		reqComplete.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rrComplete := httptest.NewRecorder()
+		router.ServeHTTP(rrComplete, reqComplete)
+
+		require.Equal(t, http.StatusBadRequest, rrComplete.Code)
+		require.Contains(t, rrComplete.Body.String(), "upload is incomplete")
+	})
+}

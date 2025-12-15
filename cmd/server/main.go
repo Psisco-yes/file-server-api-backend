@@ -107,6 +107,12 @@ func main() {
 				r.Post("/file", server.UploadFileHandler)
 				r.Get("/archive", server.DownloadArchiveHandler)
 
+				r.Route("/upload", func(r chi.Router) {
+					r.Post("/initiate", server.InitiateUploadHandler)
+					r.Patch("/{uploadId}", server.UploadChunkHandler)
+					r.Post("/{uploadId}/complete", server.CompleteUploadHandler)
+				})
+
 				r.Route("/{nodeId}", func(r chi.Router) {
 					r.Get("/", server.GetNodeHandler)
 					r.Get("/download", server.DownloadFileHandler)

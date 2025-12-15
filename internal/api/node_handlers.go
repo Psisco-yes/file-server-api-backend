@@ -198,8 +198,8 @@ func (s *Server) ListNodesHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(nodes)
 }
 
-// @Summary      Upload file(s)
-// @Description  Uploads one or more files. If uploaded inside a shared folder with write permissions, the folder's owner becomes the owner of the new file(s). The total size of the request payload cannot exceed 1GB. Exceeding the owner's storage quota will result in an error.
+// @Summary      Upload file(s) (Simple Upload)
+// @Description  Uploads one or more small files in a single request. This endpoint is recommended for files up to 100MB. For larger files, use the chunked upload flow (/nodes/upload/initiate). If uploaded inside a shared folder with write permissions, the folder's owner becomes the owner of the new file(s). The total size of the request payload cannot exceed 1GB. Exceeding the owner's storage quota will result in an error.
 // @Tags         nodes
 // @Accept       multipart/form-data
 // @Produce      json
@@ -217,7 +217,7 @@ func (s *Server) ListNodesHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<30) // TODO: zaimplementować chunked upload!!!
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<30)
 
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		http.Error(w, "Error parsing multipart form: "+err.Error(), http.StatusBadRequest)

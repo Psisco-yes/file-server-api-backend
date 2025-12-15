@@ -69,6 +69,20 @@ CREATE TABLE event_journal (
 
 CREATE INDEX idx_event_journal_user_id_id ON event_journal(user_id, id);
 
+CREATE TABLE uploads (
+    id UUID PRIMARY KEY,
+    node_id VARCHAR(21) UNIQUE NOT NULL,
+    owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    parent_id VARCHAR(21) REFERENCES nodes(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    mime_type VARCHAR(255),
+    total_size_bytes BIGINT NOT NULL,
+    uploaded_bytes BIGINT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_uploads_owner_id ON uploads(owner_id);
+
 INSERT INTO users (username, password_hash, display_name, storage_quota_bytes)
 VALUES ('admin', '$2a$12$Q5YPzisDD241y55p0fwlJe/myrAlTl4BEzromC5nKzDM6jK33XaBK', 'Administrator', 10485760);
 

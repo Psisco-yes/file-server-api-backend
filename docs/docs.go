@@ -581,7 +581,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Uploads one or more files. If uploaded inside a shared folder with write permissions, the folder's owner becomes the owner of the new file(s). The total size of the request payload cannot exceed 1GB. Exceeding the owner's storage quota will result in an error.",
+                "description": "Uploads one or more small files in a single request. This endpoint is recommended for files up to 100MB. For larger files, use the chunked upload flow (/nodes/upload/initiate). If uploaded inside a shared folder with write permissions, the folder's owner becomes the owner of the new file(s). The total size of the request payload cannot exceed 1GB. Exceeding the owner's storage quota will result in an error.",
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -591,7 +591,7 @@ const docTemplate = `{
                 "tags": [
                     "nodes"
                 ],
-                "summary": "Upload file(s)",
+                "summary": "Upload file(s) (Simple Upload)",
                 "parameters": [
                     {
                         "type": "file",
@@ -718,6 +718,209 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "Conflict - a folder with the same name already exists",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/nodes/upload/initiate": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Starts a new upload session for a large file. Returns an upload_id to be used for subsequent chunk uploads.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "uploads"
+                ],
+                "summary": "Initiate a chunked file upload",
+                "parameters": [
+                    {
+                        "description": "File metadata",
+                        "name": "uploadRequest",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.InitiateUploadRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api.InitiateUploadResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request - Invalid name or size",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - Write permission denied",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found - Parent folder not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict - a file with the same name already exists",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "413": {
+                        "description": "Payload Too Large - Storage quota exceeded",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/nodes/upload/{uploadId}": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Uploads a single chunk of a file for a given upload_id. The 'Content-Range' header is required for all chunks except the last one if its size is less than chunk size.",
+                "consumes": [
+                    "application/octet-stream"
+                ],
+                "tags": [
+                    "uploads"
+                ],
+                "summary": "Upload a file chunk",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "The ID of the upload session",
+                        "name": "uploadId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Indicates the byte range of the chunk (e.g., 'bytes 0-1048575/4194304')",
+                        "name": "Content-Range",
+                        "in": "header"
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "type": "null"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "416": {
+                        "description": "Range Not Satisfiable",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/nodes/upload/{uploadId}/complete": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Finalizes a chunked upload after all chunks have been sent. The server verifies the file and moves it to permanent storage.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "uploads"
+                ],
+                "summary": "Complete a chunked upload",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "The ID of the upload session",
+                        "name": "uploadId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/serwer-plikow_internal_models.RichNode"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request - Upload incomplete or file mismatch",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "type": "string"
                         }
@@ -2004,6 +2207,31 @@ const docTemplate = `{
                 },
                 "payload": {
                     "type": "object"
+                }
+            }
+        },
+        "internal_api.InitiateUploadRequest": {
+            "type": "object",
+            "properties": {
+                "mime_type": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "parent_id": {
+                    "type": "string"
+                },
+                "size": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_api.InitiateUploadResponse": {
+            "type": "object",
+            "properties": {
+                "upload_id": {
+                    "type": "string"
                 }
             }
         },

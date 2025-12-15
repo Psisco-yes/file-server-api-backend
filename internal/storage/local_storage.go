@@ -16,7 +16,14 @@ func NewLocalStorage(basePath string) (*LocalStorage, error) {
 	if err := os.MkdirAll(basePath, os.ModePerm); err != nil {
 		return nil, err
 	}
+	if err := os.MkdirAll(filepath.Join(basePath, "tmp"), os.ModePerm); err != nil {
+		return nil, err
+	}
 	return &LocalStorage{basePath: basePath}, nil
+}
+
+func (ls *LocalStorage) GetBasePath() string {
+	return ls.basePath
 }
 
 func (ls *LocalStorage) getPathFromID(id string) string {
@@ -94,4 +101,37 @@ func (ls *LocalStorage) Copy(sourceID string, destID string) error {
 	}
 
 	return nil
+}
+
+func (ls *LocalStorage) Append(id string, offset int64, data io.Reader) error {
+	filePath := ls.getPathFromID(id)
+
+	file, err := os.OpenFile(filePath, os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("could not open file for appending: %w", err)
+	}
+	defer file.Close()
+
+	_, err = file.Seek(offset, io.SeekStart)
+	if err != nil {
+		return fmt.Errorf("could not seek to offset %d in file: %w", offset, err)
+	}
+
+	_, err = io.Copy(file, data)
+	if err != nil {
+		return fmt.Errorf("could not write chunk to file: %w", err)
+	}
+
+	return nil
+}
+
+func (ls *LocalStorage) Move(sourcePath string, destID string) error {
+	destPath := ls.getPathFromID(destID)
+	destDir := filepath.Dir(destPath)
+
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return fmt.Errorf("could not create destination directory for move: %w", err)
+	}
+
+	return os.Rename(sourcePath, destPath)
 }
