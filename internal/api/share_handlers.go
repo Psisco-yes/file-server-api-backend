@@ -154,7 +154,7 @@ func (s *Server) ListSharingUsersHandler(w http.ResponseWriter, r *http.Request)
 // @Param        parent_id        query     string  false  "ID of the shared parent folder to list. Omit for the root of shared items."
 // @Param        limit            query     int     false  "Number of items to return" default(100)
 // @Param        offset           query     int     false  "Offset for pagination" default(0)
-// @Success      200              {array}   NodeResponse
+// @Success      200              {array}   models.RichNode
 // @Failure      400              {string}  string "Bad Request"
 // @Failure      401              {string}  string "Unauthorized"
 // @Failure      404              {string}  string "Not Found or access denied"
@@ -184,9 +184,9 @@ func (s *Server) ListSharedNodesHandler(w http.ResponseWriter, r *http.Request) 
 	parentIDStr := r.URL.Query().Get("parent_id")
 
 	if parentIDStr == "" {
-		nodes, err := s.store.ListDirectlySharedNodes(r.Context(), claims.UserID, sharer.ID, limit, offset)
+		nodes, err := s.store.ListRichDirectlySharedNodes(r.Context(), claims.UserID, sharer.ID, limit, offset)
 		if err != nil {
-			log.Printf("ERROR: Failed to list directly shared nodes for user %d from sharer %d: %v", claims.UserID, sharer.ID, err)
+			log.Printf("ERROR: Failed to list rich directly shared nodes for user %d from sharer %d: %v", claims.UserID, sharer.ID, err)
 			http.Error(w, "Failed to list shared nodes", http.StatusInternalServerError)
 			return
 		}
@@ -201,13 +201,12 @@ func (s *Server) ListSharedNodesHandler(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "Failed to check access permissions", http.StatusInternalServerError)
 		return
 	}
-
 	if !hasAccess {
 		http.Error(w, "Shared folder not found or access denied", http.StatusNotFound)
 		return
 	}
 
-	nodes, err := s.store.GetNodesByParentID(r.Context(), sharer.ID, &parentIDStr, limit, offset)
+	nodes, err := s.store.GetRichNodesByParentID(r.Context(), sharer.ID, claims.UserID, &parentIDStr, limit, offset)
 	if err != nil {
 		log.Printf("ERROR: Failed to list children for shared node %s: %v", parentIDStr, err)
 		http.Error(w, "Failed to list shared nodes content", http.StatusInternalServerError)

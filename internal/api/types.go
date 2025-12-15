@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"serwer-plikow/internal/models"
 	"time"
 )
 
@@ -64,11 +65,6 @@ type ShareResponse struct {
 	SharedAt    time.Time `json:"shared_at"`
 }
 
-type StorageUsageResponse struct {
-	UsedBytes  int64 `json:"used_bytes"`
-	QuotaBytes int64 `json:"quota_bytes"`
-}
-
 type ChangePasswordRequest struct {
 	OldPassword string `json:"old_password" example:"password123"`
 	NewPassword string `json:"new_password" example:"newStrongPassword456"`
@@ -87,4 +83,10 @@ type EventResponse struct {
 
 type LatestEventResponse struct {
 	LatestEventID int64 `json:"latest_event_id" example:"12345"`
+}
+
+type NodeDetailResponse struct {
+	models.RichNode
+	Path   []*models.RichNode      `json:"path"`
+	Shares []OutgoingShareResponse `json:"shares,omitempty"`
 }

@@ -196,33 +196,6 @@ func TestMoveNode(t *testing.T) {
 	require.Contains(t, err.Error(), "target folder does not exist")
 }
 
-func TestGetNodesByParentID(t *testing.T) {
-	owner := createTestUser(t, "user_get_nodes")
-
-	createTestNode(t, CreateNodeParams{ID: "get_nodes_root_file1", OwnerID: owner.ID, Name: "A_Root File", NodeType: "file"})
-	createTestNode(t, CreateNodeParams{ID: "get_nodes_root_folder", OwnerID: owner.ID, Name: "Z_Root Folder", NodeType: "folder"})
-
-	parentFolder := createTestNode(t, CreateNodeParams{ID: "get_nodes_parent", OwnerID: owner.ID, Name: "Parent", NodeType: "folder"})
-	createTestNode(t, CreateNodeParams{ID: "get_nodes_child_file", OwnerID: owner.ID, ParentID: &parentFolder.ID, Name: "Child File", NodeType: "file"})
-
-	rootNodes, err := testStore.GetNodesByParentID(context.Background(), owner.ID, nil, 100, 0)
-	require.NoError(t, err)
-	require.Len(t, rootNodes, 3)
-	require.Equal(t, "Parent", rootNodes[0].Name)
-	require.Equal(t, "Z_Root Folder", rootNodes[1].Name)
-	require.Equal(t, "A_Root File", rootNodes[2].Name)
-
-	childNodes, err := testStore.GetNodesByParentID(context.Background(), owner.ID, &parentFolder.ID, 100, 0)
-	require.NoError(t, err)
-	require.Len(t, childNodes, 1)
-	require.Equal(t, "Child File", childNodes[0].Name)
-
-	emptyFolder := createTestNode(t, CreateNodeParams{ID: "get_nodes_empty", OwnerID: owner.ID, Name: "Empty", NodeType: "folder"})
-	emptyNodes, err := testStore.GetNodesByParentID(context.Background(), owner.ID, &emptyFolder.ID, 100, 0)
-	require.NoError(t, err)
-	require.Len(t, emptyNodes, 0)
-}
-
 func TestNodeExists(t *testing.T) {
 	owner := createTestUser(t, "user_node_exists")
 	node := createTestNode(t, CreateNodeParams{ID: "existing_node", OwnerID: owner.ID, Name: "Existing", NodeType: "file"})
@@ -379,23 +352,41 @@ func TestGetSharingUsers(t *testing.T) {
 	require.Len(t, users, 0)
 }
 
-func TestListDirectlySharedNodes(t *testing.T) {
-	recipient := createTestUser(t, "recipient_for_direct")
-	sharer := createTestUser(t, "sharer_for_direct")
-	otherSharer := createTestUser(t, "other_sharer_for_direct")
-	node1 := createTestNode(t, CreateNodeParams{ID: "direct_share_node1", OwnerID: sharer.ID, Name: "A_File", NodeType: "file"})
-	node2 := createTestNode(t, CreateNodeParams{ID: "direct_share_node2", OwnerID: sharer.ID, Name: "Z_Folder", NodeType: "folder"})
-	node3 := createTestNode(t, CreateNodeParams{ID: "direct_share_node3", OwnerID: otherSharer.ID, Name: "Other File", NodeType: "file"})
+func TestListRichDirectlySharedNodes(t *testing.T) {
+	recipient := createTestUser(t, "recipient_for_rich_direct")
+	sharer := createTestUser(t, "sharer_for_rich_direct")
+	otherSharer := createTestUser(t, "other_sharer_for_rich_direct")
+
+	node1 := createTestNode(t, CreateNodeParams{ID: "rich_direct_share_n1", OwnerID: sharer.ID, Name: "A_File", NodeType: "file"})
+	node2 := createTestNode(t, CreateNodeParams{ID: "rich_direct_share_n2", OwnerID: sharer.ID, Name: "Z_Folder", NodeType: "folder"})
+	node3 := createTestNode(t, CreateNodeParams{ID: "rich_direct_share_n3", OwnerID: otherSharer.ID, Name: "Other File", NodeType: "file"})
+
+	node4_fav := createTestNode(t, CreateNodeParams{ID: "rich_direct_share_n4", OwnerID: sharer.ID, Name: "B_Fav_File", NodeType: "file"})
 
 	createTestShare(t, ShareNodeParams{NodeID: node1.ID, SharerID: sharer.ID, RecipientID: recipient.ID, Permissions: "read"})
 	createTestShare(t, ShareNodeParams{NodeID: node2.ID, SharerID: sharer.ID, RecipientID: recipient.ID, Permissions: "read"})
 	createTestShare(t, ShareNodeParams{NodeID: node3.ID, SharerID: otherSharer.ID, RecipientID: recipient.ID, Permissions: "read"})
+	createTestShare(t, ShareNodeParams{NodeID: node4_fav.ID, SharerID: sharer.ID, RecipientID: recipient.ID, Permissions: "read"})
 
-	nodes, err := testStore.ListDirectlySharedNodes(context.Background(), recipient.ID, sharer.ID, 100, 0)
+	err := testStore.AddFavorite(context.Background(), recipient.ID, node4_fav.ID)
 	require.NoError(t, err)
-	require.Len(t, nodes, 2)
+
+	nodes, err := testStore.ListRichDirectlySharedNodes(context.Background(), recipient.ID, sharer.ID, 100, 0)
+	require.NoError(t, err)
+
+	require.Len(t, nodes, 3)
 	require.Equal(t, "Z_Folder", nodes[0].Name)
 	require.Equal(t, "A_File", nodes[1].Name)
+	require.Equal(t, "B_Fav_File", nodes[2].Name)
+
+	for _, node := range nodes {
+		require.Equal(t, sharer.Username, node.Owner.Username)
+		if node.ID == node4_fav.ID {
+			require.True(t, node.IsFavorited, "Node 4 should be marked as favorited")
+		} else {
+			require.False(t, node.IsFavorited, "Other nodes should not be favorited")
+		}
+	}
 }
 
 func TestHasAccessToNode(t *testing.T) {
@@ -1014,4 +1005,48 @@ func TestGetRichNodesByParentID(t *testing.T) {
 	require.Equal(t, owner.Username, foundPlain.Owner.Username)
 	require.False(t, foundPlain.IsFavorited)
 	require.False(t, foundPlain.IsShared)
+}
+
+func TestGetRichTrash(t *testing.T) {
+	owner := createTestUser(t, "user_rich_trash")
+
+	trashedNode := createTestNode(t, CreateNodeParams{ID: "rich_trash_1", OwnerID: owner.ID, Name: "In Trash", NodeType: "file"})
+	_, err := testStore.MoveNodeToTrash(context.Background(), trashedNode.ID, owner.ID)
+	require.NoError(t, err)
+
+	createTestNode(t, CreateNodeParams{ID: "rich_trash_2", OwnerID: owner.ID, Name: "Not In Trash", NodeType: "file"})
+
+	trashItems, err := testStore.GetRichTrash(context.Background(), owner.ID, 10, 0)
+	require.NoError(t, err)
+
+	require.Len(t, trashItems, 1, "Should find exactly one item in trash")
+
+	node := trashItems[0]
+	require.Equal(t, trashedNode.ID, node.ID)
+	require.Equal(t, owner.Username, node.Owner.Username)
+
+	require.False(t, node.IsFavorited)
+	require.False(t, node.IsShared)
+}
+
+func TestSearchRichNodes(t *testing.T) {
+	userA := createTestUser(t, "search_querier_A")
+	userB := createTestUser(t, "search_querier_B")
+
+	createTestNode(t, CreateNodeParams{ID: "search_own_A", OwnerID: userA.ID, Name: "Mój Dokument A", NodeType: "file"})
+	createTestNode(t, CreateNodeParams{ID: "search_private_B", OwnerID: userB.ID, Name: "Prywatny Dokument B", NodeType: "file"})
+	sharedNode := createTestNode(t, CreateNodeParams{ID: "search_shared_B_to_A", OwnerID: userB.ID, Name: "Wspólny Dokument B", NodeType: "file"})
+	createTestShare(t, ShareNodeParams{NodeID: sharedNode.ID, SharerID: userB.ID, RecipientID: userA.ID, Permissions: "read"})
+
+	results, err := testStore.SearchRichNodes(context.Background(), userA.ID, "Dokument", 10, 0)
+	require.NoError(t, err)
+
+	require.Len(t, results, 2)
+
+	foundNames := make(map[string]bool)
+	for _, n := range results {
+		foundNames[n.Name] = true
+	}
+	require.True(t, foundNames["Mój Dokument A"])
+	require.True(t, foundNames["Wspólny Dokument B"])
 }

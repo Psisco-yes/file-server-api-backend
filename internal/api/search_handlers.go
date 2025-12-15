@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	_ "serwer-plikow/internal/models"
 )
 
 // @Summary      Search for files and folders
@@ -13,7 +14,7 @@ import (
 // @Param        q      query     string  true  "Search query string"
 // @Param        limit  query     int     false "Number of items to return" default(100)
 // @Param        offset query     int     false "Offset for pagination" default(0)
-// @Success      200    {array}   NodeResponse
+// @Success      200    {array}   models.RichNode
 // @Failure      400    {string}  string "Bad Request - Missing query"
 // @Failure      401    {string}  string "Unauthorized"
 // @Failure      500    {string}  string "Internal Server Error"
@@ -28,7 +29,7 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	nodes, err := s.store.SearchNodes(r.Context(), claims.UserID, query, limit, offset)
+	nodes, err := s.store.SearchRichNodes(r.Context(), claims.UserID, query, limit, offset)
 	if err != nil {
 		http.Error(w, "Failed to perform search", http.StatusInternalServerError)
 		return

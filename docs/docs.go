@@ -231,7 +231,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/internal_api.NodeResponse"
+                                "$ref": "#/definitions/serwer-plikow_internal_models.RichNode"
                             }
                         }
                     },
@@ -257,7 +257,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Retrieves information about the currently authenticated user from their JWT token.",
+                "description": "Retrieves full information about the currently authenticated user, including their storage usage and quota.",
                 "produces": [
                     "application/json"
                 ],
@@ -269,7 +269,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/serwer-plikow_internal_auth.AppClaims"
+                            "$ref": "#/definitions/serwer-plikow_internal_models.User"
                         }
                     },
                     "401": {
@@ -396,49 +396,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/me/storage": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Retrieves the current storage usage and quota for the authenticated user.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "users"
-                ],
-                "summary": "Get storage usage",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_api.StorageUsageResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "404": {
-                        "description": "User not found",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
-        },
         "/nodes": {
             "get": {
                 "security": [
@@ -482,7 +439,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/internal_api.NodeResponse"
+                                "$ref": "#/definitions/serwer-plikow_internal_models.RichNode"
                             }
                         }
                     },
@@ -598,7 +555,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/internal_api.NodeResponse"
+                                "$ref": "#/definitions/serwer-plikow_internal_models.RichNode"
                             }
                         }
                     },
@@ -674,7 +631,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/internal_api.NodeResponse"
+                            "$ref": "#/definitions/serwer-plikow_internal_models.RichNode"
                         }
                     },
                     "400": {
@@ -744,7 +701,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_api.NodeResponse"
+                            "$ref": "#/definitions/internal_api.NodeDetailResponse"
                         }
                     },
                     "401": {
@@ -859,7 +816,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_api.NodeResponse"
+                            "$ref": "#/definitions/serwer-plikow_internal_models.RichNode"
                         }
                     },
                     "400": {
@@ -941,7 +898,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/internal_api.NodeResponse"
+                            "$ref": "#/definitions/serwer-plikow_internal_models.RichNode"
                         }
                     },
                     "400": {
@@ -1143,61 +1100,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/nodes/{nodeId}/path": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Retrieves the hierarchical path (ancestors) for a given node, from the root down to the node's parent.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "nodes"
-                ],
-                "summary": "Get node path (breadcrumbs)",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "The ID of the node",
-                        "name": "nodeId",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/internal_api.NodeResponse"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
-        },
         "/nodes/{nodeId}/restore": {
             "post": {
                 "security": [
@@ -1329,61 +1231,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/nodes/{nodeId}/shares": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Retrieves a list of all users a specific node has been shared with. Only the owner of the node can perform this action.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "shares"
-                ],
-                "summary": "Get shares for a specific node",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "The ID of the node",
-                        "name": "nodeId",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/internal_api.OutgoingShareResponse"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found - Node not found or you are not the owner",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
-        },
         "/search": {
             "get": {
                 "security": [
@@ -1428,7 +1275,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/internal_api.NodeResponse"
+                                "$ref": "#/definitions/serwer-plikow_internal_models.RichNode"
                             }
                         }
                     },
@@ -1627,7 +1474,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/internal_api.NodeResponse"
+                                "$ref": "#/definitions/serwer-plikow_internal_models.RichNode"
                             }
                         }
                     },
@@ -1814,7 +1661,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/internal_api.NodeResponse"
+                                "$ref": "#/definitions/serwer-plikow_internal_models.RichNode"
                             }
                         }
                     },
@@ -1981,7 +1828,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_api.NodeResponse": {
+        "internal_api.NodeDetailResponse": {
             "type": "object",
             "properties": {
                 "created_at": {
@@ -1991,9 +1838,17 @@ const docTemplate = `{
                     "type": "string",
                     "example": "_vx2a-43VqRT5wz_s9u4"
                 },
+                "is_favorited": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "is_shared": {
+                    "type": "boolean",
+                    "example": false
+                },
                 "mime_type": {
                     "type": "string",
-                    "example": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    "example": "application/pdf"
                 },
                 "modified_at": {
                     "type": "string"
@@ -2006,13 +1861,24 @@ const docTemplate = `{
                     "type": "string",
                     "example": "file"
                 },
-                "owner_id": {
-                    "type": "integer",
-                    "example": 1
+                "owner": {
+                    "$ref": "#/definitions/serwer-plikow_internal_models.RichNodeOwner"
                 },
                 "parent_id": {
                     "type": "string",
                     "example": "fLW5kAh2ia9vYmjMnU4nZ"
+                },
+                "path": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serwer-plikow_internal_models.RichNode"
+                    }
+                },
+                "shares": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_api.OutgoingShareResponse"
+                    }
                 },
                 "size_bytes": {
                     "type": "integer",
@@ -2057,7 +1923,7 @@ const docTemplate = `{
             "properties": {
                 "refresh_token": {
                     "type": "string",
-                    "example": "V1StGXR8_Z5jdHi6B-myT78q_Z5jdHi6B-myT78q"
+                    "example": "V1StGXR8_Z5jdHi6B-myT78q..."
                 }
             }
         },
@@ -2123,27 +1989,16 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_api.StorageUsageResponse": {
-            "type": "object",
-            "properties": {
-                "quota_bytes": {
-                    "type": "integer"
-                },
-                "used_bytes": {
-                    "type": "integer"
-                }
-            }
-        },
         "internal_api.TokenResponse": {
             "type": "object",
             "properties": {
                 "access_token": {
                     "type": "string",
-                    "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJ1c2VybmFtZSI6ImFkbWluIiwiZXhwIjoxNjE2NDI2NzY2fQ...."
+                    "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
                 },
                 "refresh_token": {
                     "type": "string",
-                    "example": "V1StGXR8_Z5jdHi6B-myT78q_Z5jdHi6B-myT78q"
+                    "example": "V1StGXR8_Z5jdHi6B-myT78q..."
                 }
             }
         },
@@ -2169,65 +2024,66 @@ const docTemplate = `{
                 }
             }
         },
-        "jwt.NumericDate": {
+        "serwer-plikow_internal_models.RichNode": {
             "type": "object",
             "properties": {
-                "time.Time": {
+                "created_at": {
                     "type": "string"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "_vx2a-43VqRT5wz_s9u4"
+                },
+                "is_favorited": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "is_shared": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "mime_type": {
+                    "type": "string",
+                    "example": "application/pdf"
+                },
+                "modified_at": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Raport_Q3.docx"
+                },
+                "node_type": {
+                    "type": "string",
+                    "example": "file"
+                },
+                "owner": {
+                    "$ref": "#/definitions/serwer-plikow_internal_models.RichNodeOwner"
+                },
+                "parent_id": {
+                    "type": "string",
+                    "example": "fLW5kAh2ia9vYmjMnU4nZ"
+                },
+                "size_bytes": {
+                    "type": "integer",
+                    "example": 123456
                 }
             }
         },
-        "serwer-plikow_internal_auth.AppClaims": {
+        "serwer-plikow_internal_models.RichNodeOwner": {
             "type": "object",
             "properties": {
-                "aud": {
-                    "description": "the ` + "`" + `aud` + "`" + ` (Audience) claim. See https://datatracker.ietf.org/doc/html/rfc7519#section-4.1.3",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
+                "display_name": {
+                    "type": "string",
+                    "example": "Administrator"
                 },
-                "exp": {
-                    "description": "the ` + "`" + `exp` + "`" + ` (Expiration Time) claim. See https://datatracker.ietf.org/doc/html/rfc7519#section-4.1.4",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/jwt.NumericDate"
-                        }
-                    ]
-                },
-                "iat": {
-                    "description": "the ` + "`" + `iat` + "`" + ` (Issued At) claim. See https://datatracker.ietf.org/doc/html/rfc7519#section-4.1.6",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/jwt.NumericDate"
-                        }
-                    ]
-                },
-                "iss": {
-                    "description": "the ` + "`" + `iss` + "`" + ` (Issuer) claim. See https://datatracker.ietf.org/doc/html/rfc7519#section-4.1.1",
-                    "type": "string"
-                },
-                "jti": {
-                    "description": "the ` + "`" + `jti` + "`" + ` (JWT ID) claim. See https://datatracker.ietf.org/doc/html/rfc7519#section-4.1.7",
-                    "type": "string"
-                },
-                "nbf": {
-                    "description": "the ` + "`" + `nbf` + "`" + ` (Not Before) claim. See https://datatracker.ietf.org/doc/html/rfc7519#section-4.1.5",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/jwt.NumericDate"
-                        }
-                    ]
-                },
-                "sub": {
-                    "description": "the ` + "`" + `sub` + "`" + ` (Subject) claim. See https://datatracker.ietf.org/doc/html/rfc7519#section-4.1.2",
-                    "type": "string"
-                },
-                "user_id": {
-                    "type": "integer"
+                "id": {
+                    "type": "integer",
+                    "example": 1
                 },
                 "username": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "admin"
                 }
             }
         },

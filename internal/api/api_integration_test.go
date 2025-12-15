@@ -129,6 +129,15 @@ func TestListNodesHandler(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	favAndSharedFile, err := createTestNodeAPI(t, "Fav And Shared", "file", nil, testUser.UserID)
+	require.NoError(t, err)
+	err = testServer.store.AddFavorite(context.Background(), testUser.UserID, favAndSharedFile.ID)
+	require.NoError(t, err)
+	_, err = testServer.store.ShareNode(context.Background(), database.ShareNodeParams{
+		NodeID: favAndSharedFile.ID, SharerID: testUser.UserID, RecipientID: otherUser.ID, Permissions: "read",
+	})
+	require.NoError(t, err)
+
 	parentFolder, err := createTestNodeAPI(t, "Parent For Subdir", "folder", nil, testUser.UserID)
 	require.NoError(t, err)
 	childFile, err := createTestNodeAPI(t, "Child File", "file", &parentFolder.ID, testUser.UserID)
@@ -168,6 +177,12 @@ func TestListNodesHandler(t *testing.T) {
 		require.Equal(t, testUser.Username, shFile.Owner.Username)
 		require.False(t, shFile.IsFavorited, "Shared File should not be favorited by default")
 		require.True(t, shFile.IsShared, "Shared File should be marked as shared")
+
+		favShFile, ok := results[favAndSharedFile.ID]
+		require.True(t, ok, "Favorited and Shared File not found in response")
+		require.Equal(t, testUser.Username, favShFile.Owner.Username)
+		require.True(t, favShFile.IsFavorited, "FavAndShared File should be marked as favorited")
+		require.True(t, favShFile.IsShared, "FavAndShared File should be marked as shared")
 	})
 
 	t.Run("should list subdirectory content with rich data", func(t *testing.T) {
@@ -520,10 +535,12 @@ func TestShareAndFavorite_Integration(t *testing.T) {
 		router.ServeHTTP(rr, req)
 
 		require.Equal(t, http.StatusOK, rr.Code)
-		var nodes []models.Node
-		json.Unmarshal(rr.Body.Bytes(), &nodes)
+		var nodes []*models.RichNode
+		err := json.Unmarshal(rr.Body.Bytes(), &nodes)
+		require.NoError(t, err)
 		require.Len(t, nodes, 1)
 		require.Equal(t, nodeToShare.ID, nodes[0].ID)
+		require.Equal(t, sharer.Username, nodes[0].Owner.Username)
 	})
 
 	t.Run("recipient adds shared node to favorites and lists them", func(t *testing.T) {
@@ -616,10 +633,12 @@ func TestTrashHandlers_Integration(t *testing.T) {
 		router.ServeHTTP(rr, req)
 
 		require.Equal(t, http.StatusOK, rr.Code)
-		var nodes []models.Node
-		json.Unmarshal(rr.Body.Bytes(), &nodes)
+		var nodes []*models.RichNode
+		err := json.Unmarshal(rr.Body.Bytes(), &nodes)
+		require.NoError(t, err)
 		require.Len(t, nodes, 1)
 		require.Equal(t, nodeToTrash.ID, nodes[0].ID)
+		require.Equal(t, testUser.Username, nodes[0].Owner.Username)
 	})
 
 	t.Run("restore node from trash", func(t *testing.T) {
@@ -731,18 +750,17 @@ func TestUserHandlers_Integration(t *testing.T) {
 	user := createTestUserWithPassword(t, username, password)
 	loginResp := loginUserForTest(t, username, password)
 
-	var fileSize int64 = 2048
-	createTestNodeAPI(t, "file_for_storage.txt", "file", nil, user.ID)
-	err := testServer.store.UpdateUserStorage(context.Background(), user.ID, fileSize)
+	fileForStorage, err := createTestNodeAPI(t, "file_for_storage.txt", "file", nil, user.ID)
+	require.NoError(t, err)
+	err = testServer.store.UpdateUserStorage(context.Background(), user.ID, *fileForStorage.SizeBytes)
 	require.NoError(t, err)
 
 	router := chi.NewRouter()
 	router.Use(testServer.AuthMiddleware)
 	router.Get("/api/v1/me", testServer.GetCurrentUserHandler)
-	router.Get("/api/v1/me/storage", testServer.GetStorageUsageHandler)
 	router.Patch("/api/v1/me/password", testServer.ChangePasswordHandler)
 
-	t.Run("get current user", func(t *testing.T) {
+	t.Run("get current user with storage info", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/v1/me", nil)
 		req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
 		rr := httptest.NewRecorder()
@@ -756,20 +774,9 @@ func TestUserHandlers_Integration(t *testing.T) {
 
 		require.Equal(t, user.ID, returnedUser.ID)
 		require.Equal(t, user.Username, returnedUser.Username)
-	})
 
-	t.Run("get storage usage", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/api/v1/me/storage", nil)
-		req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
-		rr := httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
-
-		require.Equal(t, http.StatusOK, rr.Code)
-		var usage StorageUsageResponse
-		err := json.Unmarshal(rr.Body.Bytes(), &usage)
-		require.NoError(t, err)
-		require.Equal(t, fileSize, usage.UsedBytes)
-		require.Greater(t, usage.QuotaBytes, int64(0))
+		require.Equal(t, *fileForStorage.SizeBytes, returnedUser.StorageUsedBytes)
+		require.Greater(t, returnedUser.StorageQuotaBytes, int64(0))
 	})
 
 	t.Run("change password successfully", func(t *testing.T) {
@@ -961,14 +968,17 @@ func TestCopyNodeHandler_Integration(t *testing.T) {
 
 		require.Equal(t, http.StatusCreated, rr.Code)
 
-		var copiedFolder models.Node
-		json.Unmarshal(rr.Body.Bytes(), &copiedFolder)
+		var copiedFolder models.RichNode
+		err = json.Unmarshal(rr.Body.Bytes(), &copiedFolder)
+		require.NoError(t, err)
 		require.Equal(t, newName, copiedFolder.Name)
+		require.Equal(t, user.Username, copiedFolder.Owner.Username)
 
-		children, err := testServer.store.GetNodesByParentID(context.Background(), user.ID, &copiedFolder.ID, 10, 0)
+		children, err := testServer.store.GetRichNodesByParentID(context.Background(), user.ID, user.ID, &copiedFolder.ID, 10, 0)
 		require.NoError(t, err)
 		require.Len(t, children, 1)
 		require.Equal(t, "wewnetrzny.txt", children[0].Name)
+		require.Equal(t, user.Username, children[0].Owner.Username)
 
 		copiedFileContent, err := testServer.storage.Get(children[0].ID)
 		require.NoError(t, err)
@@ -982,7 +992,6 @@ func TestCopyNodeHandler_Integration(t *testing.T) {
 func TestSearchHandler_Integration(t *testing.T) {
 	userA := createTestUserWithPassword(t, "user_search_a", "password")
 	userB := createTestUserWithPassword(t, "user_search_b", "password")
-
 	loginA := loginUserForTest(t, "user_search_a", "password")
 
 	createTestNodeAPI(t, "Raport Roczny A.pdf", "file", nil, userA.ID)
@@ -991,10 +1000,7 @@ func TestSearchHandler_Integration(t *testing.T) {
 	sharedWithA, _ := createTestNodeAPI(t, "Raport Wspólny B.docx", "file", nil, userB.ID)
 
 	_, err := testServer.store.ShareNode(context.Background(), database.ShareNodeParams{
-		NodeID:      sharedWithA.ID,
-		SharerID:    userB.ID,
-		RecipientID: userA.ID,
-		Permissions: "read",
+		NodeID: sharedWithA.ID, SharerID: userB.ID, RecipientID: userA.ID, Permissions: "read",
 	})
 	require.NoError(t, err)
 
@@ -1002,19 +1008,28 @@ func TestSearchHandler_Integration(t *testing.T) {
 	router.Use(testServer.AuthMiddleware)
 	router.Get("/api/v1/search", testServer.SearchHandler)
 
-	t.Run("search finds own and shared files", func(t *testing.T) {
+	t.Run("search finds own and shared files with rich data", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/v1/search?q=Raport", nil)
 		req.Header.Set("Authorization", "Bearer "+loginA.AccessToken)
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 
 		require.Equal(t, http.StatusOK, rr.Code)
-		var results []models.Node
+		var results []*models.RichNode
 		json.Unmarshal(rr.Body.Bytes(), &results)
 
 		require.Len(t, results, 2, "Should find two reports: own and shared")
 
-		foundNames := []string{results[0].Name, results[1].Name}
+		foundNames := make(map[string]bool)
+		for _, node := range results {
+			foundNames[node.Name] = true
+			if node.Name == "Raport Roczny A.pdf" {
+				require.Equal(t, userA.Username, node.Owner.Username)
+			}
+			if node.Name == "Raport Wspólny B.docx" {
+				require.Equal(t, userB.Username, node.Owner.Username)
+			}
+		}
 		require.Contains(t, foundNames, "Raport Roczny A.pdf")
 		require.Contains(t, foundNames, "Raport Wspólny B.docx")
 	})
@@ -1026,7 +1041,7 @@ func TestSearchHandler_Integration(t *testing.T) {
 		router.ServeHTTP(rr, req)
 
 		require.Equal(t, http.StatusOK, rr.Code)
-		var results []models.Node
+		var results []*models.RichNode // <-- ZMIANA
 		json.Unmarshal(rr.Body.Bytes(), &results)
 		require.Len(t, results, 0, "Should not find private files of other users")
 	})
@@ -1067,123 +1082,86 @@ func TestUpdateCurrentUserHandler_Integration(t *testing.T) {
 }
 
 func TestGetNodeHandler_Integration(t *testing.T) {
-	userA := createTestUserWithPassword(t, "user_getnode_a", "password")
-	userB := createTestUserWithPassword(t, "user_getnode_b", "password")
+	owner := createTestUserWithPassword(t, "user_getnode_owner", "password")
+	recipient := createTestUserWithPassword(t, "user_getnode_recipient", "password")
+	stranger := createTestUserWithPassword(t, "user_getnode_stranger", "password")
 
-	loginA := loginUserForTest(t, "user_getnode_a", "password")
-	loginB := loginUserForTest(t, "user_getnode_b", "password")
+	ownerLogin := loginUserForTest(t, owner.Username, "password")
+	recipientLogin := loginUserForTest(t, recipient.Username, "password")
+	strangerLogin := loginUserForTest(t, stranger.Username, "password")
 
-	privateNodeA, err := createTestNodeAPI(t, "Private A", "file", nil, userA.ID)
-	require.NoError(t, err)
-	sharedNodeB, err := createTestNodeAPI(t, "Shared B", "file", nil, userB.ID)
-	require.NoError(t, err)
+	folderA, _ := createTestNodeAPI(t, "FolderA_Details", "folder", nil, owner.ID)
+	fileB, _ := createTestNodeAPI(t, "FileB_Details.txt", "file", &folderA.ID, owner.ID)
 
-	_, err = testServer.store.ShareNode(context.Background(), database.ShareNodeParams{
-		NodeID:      sharedNodeB.ID,
-		SharerID:    userB.ID,
-		RecipientID: userA.ID,
+	_, err := testServer.store.ShareNode(context.Background(), database.ShareNodeParams{
+		NodeID:      fileB.ID,
+		SharerID:    owner.ID,
+		RecipientID: recipient.ID,
 		Permissions: "read",
 	})
+	require.NoError(t, err)
+
+	err = testServer.store.AddFavorite(context.Background(), owner.ID, fileB.ID)
 	require.NoError(t, err)
 
 	router := chi.NewRouter()
 	router.Use(testServer.AuthMiddleware)
 	router.Get("/api/v1/nodes/{nodeId}", testServer.GetNodeHandler)
 
-	t.Run("owner can get their own node", func(t *testing.T) {
-		url := fmt.Sprintf("/api/v1/nodes/%s", privateNodeA.ID)
+	t.Run("owner gets full details of their node", func(t *testing.T) {
+		url := fmt.Sprintf("/api/v1/nodes/%s", fileB.ID)
 		req := httptest.NewRequest("GET", url, nil)
-		req.Header.Set("Authorization", "Bearer "+loginA.AccessToken)
-		rr := httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
-		require.Equal(t, http.StatusOK, rr.Code)
-		var node models.Node
-		json.Unmarshal(rr.Body.Bytes(), &node)
-		require.Equal(t, privateNodeA.ID, node.ID)
-	})
-
-	t.Run("recipient can get a shared node", func(t *testing.T) {
-		url := fmt.Sprintf("/api/v1/nodes/%s", sharedNodeB.ID)
-		req := httptest.NewRequest("GET", url, nil)
-		req.Header.Set("Authorization", "Bearer "+loginA.AccessToken)
-		rr := httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
-		require.Equal(t, http.StatusOK, rr.Code)
-		var node models.Node
-		json.Unmarshal(rr.Body.Bytes(), &node)
-		require.Equal(t, sharedNodeB.ID, node.ID)
-	})
-
-	t.Run("other user cannot get a private node", func(t *testing.T) {
-		url := fmt.Sprintf("/api/v1/nodes/%s", privateNodeA.ID)
-		req := httptest.NewRequest("GET", url, nil)
-		req.Header.Set("Authorization", "Bearer "+loginB.AccessToken)
-		rr := httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
-		require.Equal(t, http.StatusNotFound, rr.Code)
-	})
-
-	t.Run("request for non-existent node returns 404", func(t *testing.T) {
-		url := fmt.Sprintf("/api/v1/nodes/%s", "non_existent_id_123")
-		req := httptest.NewRequest("GET", url, nil)
-		req.Header.Set("Authorization", "Bearer "+loginA.AccessToken)
-		rr := httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
-		require.Equal(t, http.StatusNotFound, rr.Code)
-	})
-}
-
-func TestPathAndNodeShares_Integration(t *testing.T) {
-	userA := createTestUserWithPassword(t, "user_pathshare_a", "password")
-	userB := createTestUserWithPassword(t, "user_pathshare_b", "password")
-	loginA := loginUserForTest(t, "user_pathshare_a", "password")
-	loginB := loginUserForTest(t, "user_pathshare_b", "password")
-
-	folderA, _ := createTestNodeAPI(t, "FolderA_path", "folder", nil, userA.ID)
-	folderB, _ := createTestNodeAPI(t, "FolderB_path", "folder", &folderA.ID, userA.ID)
-	fileC, _ := createTestNodeAPI(t, "FileC_path.txt", "file", &folderB.ID, userA.ID)
-
-	_, err := testServer.store.ShareNode(context.Background(), database.ShareNodeParams{NodeID: fileC.ID, SharerID: userA.ID, RecipientID: userB.ID, Permissions: "read"})
-	require.NoError(t, err)
-
-	router := chi.NewRouter()
-	router.Use(testServer.AuthMiddleware)
-	router.Get("/api/v1/nodes/{nodeId}/path", testServer.GetNodePathHandler)
-	router.Get("/api/v1/nodes/{nodeId}/shares", testServer.GetNodeSharesHandler)
-
-	t.Run("get node path", func(t *testing.T) {
-		url := fmt.Sprintf("/api/v1/nodes/%s/path", fileC.ID)
-		req := httptest.NewRequest("GET", url, nil)
-		req.Header.Set("Authorization", "Bearer "+loginA.AccessToken)
+		req.Header.Set("Authorization", "Bearer "+ownerLogin.AccessToken)
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 
 		require.Equal(t, http.StatusOK, rr.Code)
-		var path []models.Node
-		json.Unmarshal(rr.Body.Bytes(), &path)
-		require.Len(t, path, 2)
-		require.Equal(t, "FolderA_path", path[0].Name)
-		require.Equal(t, "FolderB_path", path[1].Name)
+		var resp NodeDetailResponse
+		err := json.Unmarshal(rr.Body.Bytes(), &resp)
+		require.NoError(t, err)
+
+		require.Equal(t, fileB.ID, resp.ID)
+		require.Equal(t, owner.Username, resp.Owner.Username)
+		require.True(t, resp.IsFavorited, "File should be favorited by owner")
+		require.True(t, resp.IsShared, "File should be marked as shared")
+
+		require.Len(t, resp.Path, 1, "Path should contain one ancestor")
+		require.Equal(t, folderA.ID, resp.Path[0].ID)
+		require.Equal(t, "FolderA_Details", resp.Path[0].Name)
+		require.Equal(t, owner.Username, resp.Path[0].Owner.Username)
+
+		require.Len(t, resp.Shares, 1, "Shares should contain one entry")
+		require.Equal(t, recipient.Username, resp.Shares[0].RecipientUsername)
+		require.Equal(t, "read", resp.Shares[0].Permissions)
 	})
 
-	t.Run("get shares for a node", func(t *testing.T) {
-		url := fmt.Sprintf("/api/v1/nodes/%s/shares", fileC.ID)
+	t.Run("recipient gets details of a shared node", func(t *testing.T) {
+		url := fmt.Sprintf("/api/v1/nodes/%s", fileB.ID)
 		req := httptest.NewRequest("GET", url, nil)
-		req.Header.Set("Authorization", "Bearer "+loginA.AccessToken)
+		req.Header.Set("Authorization", "Bearer "+recipientLogin.AccessToken)
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 
 		require.Equal(t, http.StatusOK, rr.Code)
-		var shares []database.OutgoingShare
-		json.Unmarshal(rr.Body.Bytes(), &shares)
-		require.Len(t, shares, 1)
-		require.Equal(t, "user_pathshare_b", shares[0].RecipientUsername)
+		var resp NodeDetailResponse
+		err := json.Unmarshal(rr.Body.Bytes(), &resp)
+		require.NoError(t, err)
+
+		require.Equal(t, fileB.ID, resp.ID)
+		require.Equal(t, owner.Username, resp.Owner.Username)
+		require.False(t, resp.IsFavorited, "File should not be favorited by recipient by default")
+		require.True(t, resp.IsShared, "Shared flag should be visible to recipient")
+
+		require.Empty(t, resp.Shares, "Shares field should be empty for non-owners")
+
+		require.Len(t, resp.Path, 1)
+		require.Equal(t, folderA.ID, resp.Path[0].ID)
 	})
 
-	t.Run("non-owner cannot get shares for a node", func(t *testing.T) {
-		url := fmt.Sprintf("/api/v1/nodes/%s/shares", fileC.ID)
+	t.Run("stranger cannot get details of a private node", func(t *testing.T) {
+		url := fmt.Sprintf("/api/v1/nodes/%s", fileB.ID)
 		req := httptest.NewRequest("GET", url, nil)
-		req.Header.Set("Authorization", "Bearer "+loginB.AccessToken)
+		req.Header.Set("Authorization", "Bearer "+strangerLogin.AccessToken)
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 

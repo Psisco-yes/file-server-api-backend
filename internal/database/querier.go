@@ -253,23 +253,17 @@ func (q *Queries) GetSharingUsers(ctx context.Context, recipientID int64, limit 
 	return users, nil
 }
 
-func (q *Queries) ListDirectlySharedNodes(ctx context.Context, recipientID int64, sharerID int64, limit int, offset int) ([]models.Node, error) {
-	query := `
-		SELECT 
-			n.id, 
-			n.owner_id, 
-			n.parent_id, 
-			n.name, 
-			n.node_type, 
-			n.size_bytes, 
-			n.mime_type,
-			n.created_at,
-			n.modified_at
+func (q *Queries) ListRichDirectlySharedNodes(ctx context.Context, recipientID int64, sharerID int64, limit int, offset int) ([]*models.RichNode, error) {
+	query := fmt.Sprintf(`
+		SELECT %s
 		FROM nodes n
+		JOIN users u ON n.owner_id = u.id
 		JOIN shares s ON n.id = s.node_id
+		LEFT JOIN user_favorites fav ON n.id = fav.node_id AND fav.user_id = $1
 		WHERE s.recipient_id = $1 AND s.sharer_id = $2 AND n.deleted_at IS NULL
-		ORDER BY n.node_type DESC, n.name LIMIT $3 OFFSET $4
-	`
+		ORDER BY n.node_type DESC, n.name
+		LIMIT $3 OFFSET $4
+	`, richNodeFields)
 
 	rows, err := q.db.Query(ctx, query, recipientID, sharerID, limit, offset)
 	if err != nil {
@@ -277,32 +271,17 @@ func (q *Queries) ListDirectlySharedNodes(ctx context.Context, recipientID int64
 	}
 	defer rows.Close()
 
-	var nodes []models.Node
+	var nodes []*models.RichNode
 	for rows.Next() {
-		var node models.Node
-		err := rows.Scan(
-			&node.ID,
-			&node.OwnerID,
-			&node.ParentID,
-			&node.Name,
-			&node.NodeType,
-			&node.SizeBytes,
-			&node.MimeType,
-			&node.CreatedAt,
-			&node.ModifiedAt,
-		)
+		node, err := scanRichNode(rows)
 		if err != nil {
 			return nil, err
 		}
 		nodes = append(nodes, node)
 	}
 
-	if err = rows.Err(); err != nil {
-		return nil, err
-	}
-
 	if nodes == nil {
-		return []models.Node{}, nil
+		return []*models.RichNode{}, nil
 	}
 
 	return nodes, nil
@@ -468,27 +447,14 @@ func (q *Queries) CreateNode(ctx context.Context, arg CreateNodeParams) (*models
 	return &node, nil
 }
 
-func (q *Queries) GetNodesByParentID(ctx context.Context, ownerID int64, parentID *string, limit int, offset int) ([]models.Node, error) {
-	var query string
-	var rows pgx.Rows
-	var err error
+func (q *Queries) GetNodesByParentIDSimple(ctx context.Context, ownerID int64, parentID *string) ([]models.Node, error) {
+	query := `
+		SELECT id, owner_id, parent_id, name, node_type, size_bytes, mime_type, created_at, modified_at
+		FROM nodes 
+		WHERE owner_id = $1 AND parent_id = $2 AND deleted_at IS NULL
+		ORDER BY node_type DESC, name`
 
-	if parentID == nil {
-		query = `SELECT id, owner_id, name, node_type, size_bytes, mime_type, created_at, modified_at 
-				 FROM nodes 
-				 WHERE owner_id = $1 AND parent_id IS NULL AND deleted_at IS NULL
-				 ORDER BY node_type DESC, name
-				 LIMIT $2 OFFSET $3`
-		rows, err = q.db.Query(ctx, query, ownerID, limit, offset)
-	} else {
-		query = `SELECT id, owner_id, name, node_type, size_bytes, mime_type, created_at, modified_at 
-				 FROM nodes 
-				 WHERE owner_id = $1 AND parent_id = $2 AND deleted_at IS NULL
-				 ORDER BY node_type DESC, name
-				 LIMIT $3 OFFSET $4`
-		rows, err = q.db.Query(ctx, query, ownerID, *parentID, limit, offset)
-	}
-
+	rows, err := q.db.Query(ctx, query, ownerID, parentID)
 	if err != nil {
 		return nil, err
 	}
@@ -498,24 +464,13 @@ func (q *Queries) GetNodesByParentID(ctx context.Context, ownerID int64, parentI
 	for rows.Next() {
 		var node models.Node
 		err := rows.Scan(
-			&node.ID,
-			&node.OwnerID,
-			&node.Name,
-			&node.NodeType,
-			&node.SizeBytes,
-			&node.MimeType,
-			&node.CreatedAt,
-			&node.ModifiedAt,
+			&node.ID, &node.OwnerID, &node.ParentID, &node.Name, &node.NodeType,
+			&node.SizeBytes, &node.MimeType, &node.CreatedAt, &node.ModifiedAt,
 		)
 		if err != nil {
 			return nil, err
 		}
-		node.OwnerID = ownerID
 		nodes = append(nodes, node)
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, err
 	}
 
 	if nodes == nil {
@@ -1308,6 +1263,161 @@ func (q *Queries) GetRichNodesByParentID(ctx context.Context, ownerID int64, req
 	}
 
 	rows, err := q.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var nodes []*models.RichNode
+	for rows.Next() {
+		node, err := scanRichNode(rows)
+		if err != nil {
+			return nil, err
+		}
+		nodes = append(nodes, node)
+	}
+
+	if nodes == nil {
+		return []*models.RichNode{}, nil
+	}
+
+	return nodes, nil
+}
+
+func (q *Queries) GetRichNodePath(ctx context.Context, nodeID string, requesterID int64) ([]*models.RichNode, error) {
+	query := fmt.Sprintf(`
+		WITH RECURSIVE node_path AS (
+			SELECT * FROM nodes WHERE id = (SELECT parent_id FROM nodes WHERE id = $1)
+			UNION ALL
+			SELECT n.* FROM nodes n JOIN node_path np ON n.id = np.parent_id
+		)
+		SELECT %s
+		FROM node_path n
+		JOIN users u ON n.owner_id = u.id
+		LEFT JOIN user_favorites fav ON n.id = fav.node_id AND fav.user_id = $2
+		WHERE n.deleted_at IS NULL;
+	`, richNodeFields)
+
+	rows, err := q.db.Query(ctx, query, nodeID, requesterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var pathNodes []*models.RichNode
+	for rows.Next() {
+		node, err := scanRichNode(rows)
+		if err != nil {
+			return nil, err
+		}
+		pathNodes = append(pathNodes, node)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	for i, j := 0, len(pathNodes)-1; i < j; i, j = i+1, j-1 {
+		pathNodes[i], pathNodes[j] = pathNodes[j], pathNodes[i]
+	}
+
+	if pathNodes == nil {
+		return []*models.RichNode{}, nil
+	}
+	return pathNodes, nil
+}
+
+func (q *Queries) GetRichFavorites(ctx context.Context, requesterID int64, limit int, offset int) ([]*models.RichNode, error) {
+	query := fmt.Sprintf(`
+		SELECT %s
+		FROM nodes n
+		JOIN users u ON n.owner_id = u.id
+		JOIN user_favorites fav ON n.id = fav.node_id AND fav.user_id = $1
+		WHERE n.deleted_at IS NULL
+		ORDER BY n.name LIMIT $2 OFFSET $3
+	`, richNodeFields)
+
+	rows, err := q.db.Query(ctx, query, requesterID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var nodes []*models.RichNode
+	for rows.Next() {
+		node, err := scanRichNode(rows)
+		if err != nil {
+			return nil, err
+		}
+		nodes = append(nodes, node)
+	}
+
+	if nodes == nil {
+		return []*models.RichNode{}, nil
+	}
+
+	return nodes, nil
+}
+
+func (q *Queries) GetRichTrash(ctx context.Context, ownerID int64, limit int, offset int) ([]*models.RichNode, error) {
+	query := fmt.Sprintf(`
+		SELECT %s
+		FROM nodes n
+		JOIN users u ON n.owner_id = u.id
+		LEFT JOIN user_favorites fav ON n.id = fav.node_id AND fav.user_id = $1
+		WHERE n.owner_id = $1 AND n.deleted_at IS NOT NULL
+		ORDER BY n.deleted_at DESC LIMIT $2 OFFSET $3
+	`, richNodeFields)
+
+	rows, err := q.db.Query(ctx, query, ownerID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var nodes []*models.RichNode
+	for rows.Next() {
+		node, err := scanRichNode(rows)
+		if err != nil {
+			return nil, err
+		}
+		nodes = append(nodes, node)
+	}
+
+	if nodes == nil {
+		return []*models.RichNode{}, nil
+	}
+
+	return nodes, nil
+}
+
+func (q *Queries) SearchRichNodes(ctx context.Context, requesterID int64, searchQuery string, limit int, offset int) ([]*models.RichNode, error) {
+	likeQuery := "%" + searchQuery + "%"
+
+	query := fmt.Sprintf(`
+		WITH accessible_nodes AS (
+			SELECT id FROM nodes WHERE owner_id = $1 AND deleted_at IS NULL
+			UNION
+			SELECT n.id FROM nodes n
+			INNER JOIN (
+				WITH RECURSIVE shared_subtree AS (
+					SELECT id FROM nodes WHERE id IN (SELECT node_id FROM shares WHERE recipient_id = $1)
+					UNION ALL
+					SELECT c.id FROM nodes c JOIN shared_subtree ss ON c.parent_id = ss.id
+				)
+				SELECT id FROM shared_subtree
+			) AS shared_nodes ON n.id = shared_nodes.id
+			WHERE n.deleted_at IS NULL
+		)
+		SELECT %s
+		FROM nodes n
+		JOIN users u ON n.owner_id = u.id
+		LEFT JOIN user_favorites fav ON n.id = fav.node_id AND fav.user_id = $1
+		WHERE n.id IN (SELECT id FROM accessible_nodes) AND n.name ILIKE $2
+		ORDER BY n.name
+		LIMIT $3 OFFSET $4
+	`, richNodeFields)
+
+	rows, err := q.db.Query(ctx, query, requesterID, likeQuery, limit, offset)
 	if err != nil {
 		return nil, err
 	}

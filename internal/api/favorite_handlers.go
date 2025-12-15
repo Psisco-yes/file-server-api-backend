@@ -3,8 +3,10 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"serwer-plikow/internal/database"
+	_ "serwer-plikow/internal/models"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -45,10 +47,14 @@ func (s *Server) AddFavoriteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	payload := map[string]string{"node_id": nodeID}
-	eventMsg := map[string]interface{}{"event_type": "favorite_added", "payload": payload}
-	eventBytes, _ := json.Marshal(eventMsg)
-	s.wsHub.PublishEvent(claims.UserID, eventBytes)
+	richNode, err := s.store.GetRichNodeIfAccessible(r.Context(), nodeID, claims.UserID)
+	if err != nil || richNode == nil {
+		log.Printf("WARN: Could not retrieve rich node %s after adding to favorites: %v", nodeID, err)
+	} else {
+		eventMsg := map[string]interface{}{"event_type": "node_updated", "payload": richNode}
+		eventBytes, _ := json.Marshal(eventMsg)
+		s.wsHub.PublishEvent(claims.UserID, eventBytes)
+	}
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -81,10 +87,14 @@ func (s *Server) RemoveFavoriteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	payload := map[string]string{"node_id": nodeID}
-	eventMsg := map[string]interface{}{"event_type": "favorite_removed", "payload": payload}
-	eventBytes, _ := json.Marshal(eventMsg)
-	s.wsHub.PublishEvent(claims.UserID, eventBytes)
+	richNode, err := s.store.GetRichNodeIfAccessible(r.Context(), nodeID, claims.UserID)
+	if err != nil || richNode == nil {
+		log.Printf("WARN: Could not retrieve rich node %s after removing from favorites: %v", nodeID, err)
+	} else {
+		eventMsg := map[string]interface{}{"event_type": "node_updated", "payload": richNode}
+		eventBytes, _ := json.Marshal(eventMsg)
+		s.wsHub.PublishEvent(claims.UserID, eventBytes)
+	}
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -94,7 +104,7 @@ func (s *Server) RemoveFavoriteHandler(w http.ResponseWriter, r *http.Request) {
 // @Tags         favorites
 // @Produce      json
 // @Security     BearerAuth
-// @Success      200  {array}   NodeResponse
+// @Success      200  {array}   models.RichNode
 // @Failure      401  {string}  string "Unauthorized"
 // @Failure      500  {string}  string "Internal Server Error"
 // @Router       /favorites [get]
@@ -102,7 +112,7 @@ func (s *Server) ListFavoritesHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 	limit, offset := parsePagination(r)
 
-	nodes, err := s.store.ListFavorites(r.Context(), claims.UserID, limit, offset)
+	nodes, err := s.store.GetRichFavorites(r.Context(), claims.UserID, limit, offset)
 	if err != nil {
 		http.Error(w, "Failed to list favorites", http.StatusInternalServerError)
 		return

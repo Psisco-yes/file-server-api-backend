@@ -97,7 +97,6 @@ func main() {
 
 			r.Route("/me", func(r chi.Router) {
 				r.Get("/", server.GetCurrentUserHandler)
-				r.Get("/storage", server.GetStorageUsageHandler)
 				r.Patch("/password", server.ChangePasswordHandler)
 				r.Patch("/", server.UpdateCurrentUserHandler)
 			})
@@ -118,8 +117,6 @@ func main() {
 					r.Delete("/favorite", server.RemoveFavoriteHandler)
 					r.Post("/share", server.ShareNodeHandler)
 					r.Post("/copy", server.CopyNodeHandler)
-					r.Get("/path", server.GetNodePathHandler)
-					r.Get("/shares", server.GetNodeSharesHandler)
 				})
 			})
 

@@ -6,7 +6,7 @@ import (
 	"log"
 	"net/http"
 	"serwer-plikow/internal/database"
-	"serwer-plikow/internal/models"
+	_ "serwer-plikow/internal/models"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -58,7 +58,7 @@ func (s *Server) PurgeTrashHandler(w http.ResponseWriter, r *http.Request) {
 // @Tags         trash
 // @Produce      json
 // @Security     BearerAuth
-// @Success      200  {array}   NodeResponse
+// @Success      200  {array}   models.RichNode
 // @Failure      401  {string}  string "Unauthorized"
 // @Failure      500  {string}  string "Internal Server Error"
 // @Router       /trash [get]
@@ -66,7 +66,7 @@ func (s *Server) ListTrashHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 	limit, offset := parsePagination(r)
 
-	nodes, err := s.store.ListTrash(r.Context(), claims.UserID, limit, offset)
+	nodes, err := s.store.GetRichTrash(r.Context(), claims.UserID, limit, offset)
 	if err != nil {
 		http.Error(w, "Failed to list trash contents", http.StatusInternalServerError)
 		return
@@ -91,8 +91,6 @@ func (s *Server) RestoreNodeHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 	nodeID := chi.URLParam(r, "nodeId")
 
-	var restoredNode *models.Node
-
 	txErr := s.store.ExecTx(r.Context(), func(q *database.Queries) error {
 		success, err := q.RestoreNode(r.Context(), nodeID, claims.UserID)
 		if err != nil {
@@ -102,15 +100,8 @@ func (s *Server) RestoreNodeHandler(w http.ResponseWriter, r *http.Request) {
 			return database.ErrNodeNotFound
 		}
 
-		restoredNode, err = q.GetNodeByID(r.Context(), nodeID, claims.UserID)
-		if err != nil {
-			return err
-		}
-		if restoredNode == nil {
-			return errors.New("failed to retrieve restored node")
-		}
-
-		return q.LogEvent(r.Context(), claims.UserID, "node_restored", restoredNode)
+		payload := map[string]string{"id": nodeID}
+		return q.LogEvent(r.Context(), claims.UserID, "node_restored", payload)
 	})
 
 	if txErr != nil {
@@ -126,9 +117,17 @@ func (s *Server) RestoreNodeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	restoredNode, err := s.store.GetRichNodeIfAccessible(r.Context(), nodeID, claims.UserID)
+	if err != nil || restoredNode == nil {
+		http.Error(w, "Failed to retrieve restored node", http.StatusInternalServerError)
+		return
+	}
+
 	eventMsg := map[string]interface{}{"event_type": "node_restored", "payload": restoredNode}
 	eventBytes, _ := json.Marshal(eventMsg)
 	s.wsHub.PublishEvent(claims.UserID, eventBytes)
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(restoredNode)
 }
