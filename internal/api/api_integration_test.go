@@ -289,7 +289,7 @@ func TestUpdateNodeHandler_Move(t *testing.T) {
 		require.Contains(t, rr.Body.String(), "Cannot move a folder into itself")
 	})
 
-	t.Run("fail to move node between different owners", func(t *testing.T) {
+	t.Run("fail to move node to an inaccessible folder", func(t *testing.T) {
 		userA := createTestUserWithPassword(t, "user_move_owner_a", "password")
 		userB := createTestUserWithPassword(t, "user_move_owner_b", "password")
 		loginA := loginUserForTest(t, "user_move_owner_a", "password")
@@ -305,8 +305,8 @@ func TestUpdateNodeHandler_Move(t *testing.T) {
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 
-		require.Equal(t, http.StatusBadRequest, rr.Code)
-		require.Contains(t, rr.Body.String(), "Moving files between different owners is not allowed")
+		require.Equal(t, http.StatusNotFound, rr.Code)
+		require.Contains(t, rr.Body.String(), "Target folder not found or access denied")
 	})
 }
 
@@ -664,18 +664,48 @@ func TestShareAndFavorite_Integration(t *testing.T) {
 
 		require.Equal(t, http.StatusNotFound, rr.Code)
 	})
+}
 
-	t.Run("recipient cannot upload to read-only shared folder", func(t *testing.T) {
-		readonlyFolder, _ := createTestNodeAPI(t, "Read Only Folder", "folder", nil, sharer.ID)
-		_, err := testServer.store.ShareNode(context.Background(), database.ShareNodeParams{
-			NodeID: readonlyFolder.ID, SharerID: sharer.ID, RecipientID: recipient.ID, Permissions: "read",
-		})
-		require.NoError(t, err)
+func TestPermissions_ReadOnlyShare(t *testing.T) {
+	sharer := createTestUserWithPassword(t, "user_perm_sharer", "password")
+	recipient := createTestUserWithPassword(t, "user_perm_recipient", "password")
+	loginUserForTest(t, "user_perm_sharer", "password")
+	recipientLogin := loginUserForTest(t, "user_perm_recipient", "password")
 
-		payload := CreateFolderRequest{Name: "Illegal Subfolder", ParentID: &readonlyFolder.ID}
+	readOnlyFolder, _ := createTestNodeAPI(t, "ReadOnlySharedFolder", "folder", nil, sharer.ID)
+	_, err := testServer.store.ShareNode(context.Background(), database.ShareNodeParams{
+		NodeID: readOnlyFolder.ID, SharerID: sharer.ID, RecipientID: recipient.ID, Permissions: "read",
+	})
+	require.NoError(t, err)
+
+	router := chi.NewRouter()
+	router.Use(testServer.AuthMiddleware)
+	router.Post("/api/v1/nodes/folder", testServer.CreateFolderHandler)
+	router.Post("/api/v1/nodes/file", testServer.UploadFileHandler)
+
+	t.Run("recipient cannot create a subfolder in a read-only share", func(t *testing.T) {
+		payload := CreateFolderRequest{Name: "Illegal Subfolder", ParentID: &readOnlyFolder.ID}
 		body, _ := json.Marshal(payload)
 		req := httptest.NewRequest("POST", "/api/v1/nodes/folder", bytes.NewReader(body))
 		req.Header.Set("Authorization", "Bearer "+recipientLogin.AccessToken)
+		rr := httptest.NewRecorder()
+
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusForbidden, rr.Code)
+	})
+
+	t.Run("recipient cannot upload a file to a read-only share", func(t *testing.T) {
+		body := new(bytes.Buffer)
+		writer := multipart.NewWriter(body)
+		writer.WriteField("parent_id", readOnlyFolder.ID)
+		part, _ := writer.CreateFormFile("file", "illegal_file.txt")
+		part.Write([]byte("some data"))
+		writer.Close()
+
+		req := httptest.NewRequest("POST", "/api/v1/nodes/file", body)
+		req.Header.Set("Authorization", "Bearer "+recipientLogin.AccessToken)
+		req.Header.Set("Content-Type", writer.FormDataContentType())
 		rr := httptest.NewRecorder()
 
 		router.ServeHTTP(rr, req)

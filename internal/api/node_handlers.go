@@ -75,30 +75,38 @@ func (s *Server) CreateFolderHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var createdNodeID string
+	var ownerID int64 = claims.UserID
 	var ownerNotifiedID *int64
 
-	txErr := s.store.ExecTx(r.Context(), func(q *database.Queries) error {
-		hasPermission, err := q.CheckWritePermission(r.Context(), claims.UserID, req.ParentID)
+	if req.ParentID != nil {
+		parentFolder, err := s.store.GetNodeIfAccessible(r.Context(), *req.ParentID, claims.UserID)
 		if err != nil {
-			return err
+			http.Error(w, "Internal server error while checking parent folder", http.StatusInternalServerError)
+			return
 		}
-		if !hasPermission {
-			return fmt.Errorf("permission denied")
-		}
-
-		var ownerID int64 = claims.UserID
-		if req.ParentID != nil {
-			parentFolder, err := q.GetNodeIfAccessible(r.Context(), *req.ParentID, claims.UserID)
-			if err != nil || parentFolder == nil {
-				return database.ErrNodeNotFound
-			}
-			ownerID = parentFolder.OwnerID
-			if ownerID != claims.UserID {
-				ownerNotifiedID = &ownerID
-			}
+		if parentFolder == nil {
+			http.Error(w, "Parent folder not found or access denied", http.StatusNotFound)
+			return
 		}
 
+		hasWritePermission, err := s.store.CheckWritePermission(r.Context(), claims.UserID, req.ParentID)
+		if err != nil {
+			http.Error(w, "Failed to verify write permissions", http.StatusInternalServerError)
+			return
+		}
+		if !hasWritePermission {
+			http.Error(w, "You do not have permission to create items in this folder", http.StatusForbidden)
+			return
+		}
+
+		ownerID = parentFolder.OwnerID
+		if ownerID != claims.UserID {
+			ownerNotifiedID = &ownerID
+		}
+	}
+
+	var createdNodeID string
+	txErr := s.store.ExecTx(r.Context(), func(q *database.Queries) error {
 		nodeID, err := s.generateUniqueID(r.Context())
 		if err != nil {
 			return err
@@ -108,7 +116,6 @@ func (s *Server) CreateFolderHandler(w http.ResponseWriter, r *http.Request) {
 		params := database.CreateNodeParams{
 			ID: nodeID, OwnerID: ownerID, ParentID: req.ParentID, Name: req.Name, NodeType: "folder",
 		}
-
 		createdNode, err := q.CreateNode(r.Context(), params)
 		if err != nil {
 			return err
@@ -125,14 +132,6 @@ func (s *Server) CreateFolderHandler(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if txErr != nil {
-		if errors.Is(txErr, database.ErrNodeNotFound) {
-			http.Error(w, "Parent folder not found or access denied", http.StatusNotFound)
-			return
-		}
-		if txErr.Error() == "permission denied" {
-			http.Error(w, "You do not have permission to create items in this folder", http.StatusForbidden)
-			return
-		}
 		var pgErr *pgconn.PgError
 		if errors.As(txErr, &pgErr) && pgErr.Code == "23505" {
 			http.Error(w, "A folder with the same name already exists in this location", http.StatusConflict)
