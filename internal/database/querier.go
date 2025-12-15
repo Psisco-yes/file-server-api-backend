@@ -1235,3 +1235,96 @@ func (q *Queries) GetLatestEventID(ctx context.Context, userID int64) (int64, er
 
 	return latestID.Int64, nil
 }
+
+const richNodeFields = `
+    n.id, n.parent_id, n.name, n.node_type, n.size_bytes, n.mime_type, n.created_at, n.modified_at,
+    n.owner_id, u.username, u.display_name,
+    (CASE WHEN fav.user_id IS NOT NULL THEN TRUE ELSE FALSE END) as is_favorited,
+    EXISTS (SELECT 1 FROM shares s WHERE s.node_id = n.id) as is_shared
+`
+
+func scanRichNode(rows pgx.Rows) (*models.RichNode, error) {
+	var node models.RichNode
+	err := rows.Scan(
+		&node.ID, &node.ParentID, &node.Name, &node.NodeType, &node.SizeBytes, &node.MimeType, &node.CreatedAt, &node.ModifiedAt,
+		&node.Owner.ID, &node.Owner.Username, &node.Owner.DisplayName,
+		&node.IsFavorited,
+		&node.IsShared,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &node, nil
+}
+
+func (q *Queries) GetRichNodeIfAccessible(ctx context.Context, nodeID string, userID int64) (*models.RichNode, error) {
+	accessibleNode, err := q.GetNodeIfAccessible(ctx, nodeID, userID)
+	if err != nil || accessibleNode == nil {
+		return nil, err
+	}
+
+	query := fmt.Sprintf(`
+        SELECT %s
+        FROM nodes n
+        JOIN users u ON n.owner_id = u.id
+        LEFT JOIN user_favorites fav ON n.id = fav.node_id AND fav.user_id = $2
+        WHERE n.id = $1 AND n.deleted_at IS NULL
+    `, richNodeFields)
+
+	rows, err := q.db.Query(ctx, query, nodeID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	if rows.Next() {
+		return scanRichNode(rows)
+	}
+
+	return nil, nil
+}
+
+func (q *Queries) GetRichNodesByParentID(ctx context.Context, ownerID int64, requesterID int64, parentID *string, limit int, offset int) ([]*models.RichNode, error) {
+	var query string
+	var args []interface{}
+
+	baseQuery := fmt.Sprintf(`
+        SELECT %s
+        FROM nodes n
+        JOIN users u ON n.owner_id = u.id
+        LEFT JOIN user_favorites fav ON n.id = fav.node_id AND fav.user_id = $1
+    `, richNodeFields)
+
+	args = append(args, requesterID)
+
+	if parentID == nil {
+		query = fmt.Sprintf(`%s WHERE n.owner_id = $2 AND n.parent_id IS NULL AND n.deleted_at IS NULL
+                             ORDER BY n.node_type DESC, n.name LIMIT $3 OFFSET $4`, baseQuery)
+		args = append(args, ownerID, limit, offset)
+	} else {
+		query = fmt.Sprintf(`%s WHERE n.owner_id = $2 AND n.parent_id = $3 AND n.deleted_at IS NULL
+                             ORDER BY n.node_type DESC, n.name LIMIT $4 OFFSET $5`, baseQuery)
+		args = append(args, ownerID, *parentID, limit, offset)
+	}
+
+	rows, err := q.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var nodes []*models.RichNode
+	for rows.Next() {
+		node, err := scanRichNode(rows)
+		if err != nil {
+			return nil, err
+		}
+		nodes = append(nodes, node)
+	}
+
+	if nodes == nil {
+		return []*models.RichNode{}, nil
+	}
+
+	return nodes, nil
+}

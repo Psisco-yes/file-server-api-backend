@@ -107,12 +107,34 @@ func TestAPI_CreateFolder_NameConflict(t *testing.T) {
 }
 
 func TestListNodesHandler(t *testing.T) {
-	parentFolder, err := createTestNodeAPI(t, "Parent Folder", "folder", nil, testUserClaims.UserID)
-	require.NoError(t, err)
-	childFile, err := createTestNodeAPI(t, "Child File", "file", &parentFolder.ID, testUserClaims.UserID)
+	testUser := testUserClaims
+	otherUser, err := testServer.store.GetUserByUsername(context.Background(), "admin")
 	require.NoError(t, err)
 
-	t.Run("should list root directory", func(t *testing.T) {
+	plainFolder, err := createTestNodeAPI(t, "Plain Folder", "folder", nil, testUser.UserID)
+	require.NoError(t, err)
+
+	favoritedFile, err := createTestNodeAPI(t, "Favorited File", "file", nil, testUser.UserID)
+	require.NoError(t, err)
+	err = testServer.store.AddFavorite(context.Background(), testUser.UserID, favoritedFile.ID)
+	require.NoError(t, err)
+
+	sharedFile, err := createTestNodeAPI(t, "Shared File", "file", nil, testUser.UserID)
+	require.NoError(t, err)
+	_, err = testServer.store.ShareNode(context.Background(), database.ShareNodeParams{
+		NodeID:      sharedFile.ID,
+		SharerID:    testUser.UserID,
+		RecipientID: otherUser.ID,
+		Permissions: "read",
+	})
+	require.NoError(t, err)
+
+	parentFolder, err := createTestNodeAPI(t, "Parent For Subdir", "folder", nil, testUser.UserID)
+	require.NoError(t, err)
+	childFile, err := createTestNodeAPI(t, "Child File", "file", &parentFolder.ID, testUser.UserID)
+	require.NoError(t, err)
+
+	t.Run("should list root directory with rich data", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/v1/nodes", nil)
 		rr := httptest.NewRecorder()
 
@@ -120,21 +142,35 @@ func TestListNodesHandler(t *testing.T) {
 		http.HandlerFunc(testServer.ListNodesHandler).ServeHTTP(rr, req)
 
 		require.Equal(t, http.StatusOK, rr.Code)
-		var nodes []models.Node
+		var nodes []*models.RichNode
 		err := json.Unmarshal(rr.Body.Bytes(), &nodes)
 		require.NoError(t, err)
 
-		found := false
-		for _, node := range nodes {
-			if node.ID == parentFolder.ID {
-				found = true
-				break
-			}
+		results := make(map[string]*models.RichNode)
+		for _, n := range nodes {
+			results[n.ID] = n
 		}
-		require.True(t, found, "Expected to find the created parent folder in the root listing")
+
+		pFolder, ok := results[plainFolder.ID]
+		require.True(t, ok, "Plain Folder not found in response")
+		require.Equal(t, testUser.Username, pFolder.Owner.Username)
+		require.False(t, pFolder.IsFavorited, "Plain Folder should not be favorited")
+		require.False(t, pFolder.IsShared, "Plain Folder should not be shared")
+
+		favFile, ok := results[favoritedFile.ID]
+		require.True(t, ok, "Favorited File not found in response")
+		require.Equal(t, testUser.Username, favFile.Owner.Username)
+		require.True(t, favFile.IsFavorited, "Favorited File should be marked as favorited")
+		require.False(t, favFile.IsShared, "Favorited File should not be shared")
+
+		shFile, ok := results[sharedFile.ID]
+		require.True(t, ok, "Shared File not found in response")
+		require.Equal(t, testUser.Username, shFile.Owner.Username)
+		require.False(t, shFile.IsFavorited, "Shared File should not be favorited by default")
+		require.True(t, shFile.IsShared, "Shared File should be marked as shared")
 	})
 
-	t.Run("should list subdirectory content", func(t *testing.T) {
+	t.Run("should list subdirectory content with rich data", func(t *testing.T) {
 		url := fmt.Sprintf("/api/v1/nodes?parent_id=%s", parentFolder.ID)
 		req := httptest.NewRequest("GET", url, nil)
 		rr := httptest.NewRecorder()
@@ -143,11 +179,16 @@ func TestListNodesHandler(t *testing.T) {
 		http.HandlerFunc(testServer.ListNodesHandler).ServeHTTP(rr, req)
 
 		require.Equal(t, http.StatusOK, rr.Code)
-		var nodes []models.Node
+		var nodes []*models.RichNode
 		err := json.Unmarshal(rr.Body.Bytes(), &nodes)
 		require.NoError(t, err)
 		require.Len(t, nodes, 1)
-		require.Equal(t, childFile.Name, nodes[0].Name)
+
+		node := nodes[0]
+		require.Equal(t, childFile.ID, node.ID)
+		require.Equal(t, testUser.Username, node.Owner.Username)
+		require.False(t, node.IsFavorited)
+		require.False(t, node.IsShared)
 	})
 }
 

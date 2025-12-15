@@ -173,7 +173,7 @@ func (s *Server) CreateFolderHandler(w http.ResponseWriter, r *http.Request) {
 // @Param        parent_id  query     string  false  "ID of the parent folder to list. Omit for root."
 // @Param        limit      query     int     false  "Number of items to return" default(100)
 // @Param        offset     query     int     false  "Offset for pagination" default(0)
-// @Success      200        {array}   NodeResponse
+// @Success      200        {array}   models.RichNode
 // @Failure      401        {string}  string "Unauthorized"
 // @Failure      500        {string}  string "Internal Server Error"
 // @Router       /nodes [get]
@@ -187,9 +187,9 @@ func (s *Server) ListNodesHandler(w http.ResponseWriter, r *http.Request) {
 		parentID = &parentIDStr
 	}
 
-	nodes, err := s.store.GetNodesByParentID(r.Context(), claims.UserID, parentID, limit, offset)
+	nodes, err := s.store.GetRichNodesByParentID(r.Context(), claims.UserID, claims.UserID, parentID, limit, offset)
 	if err != nil {
-		log.Printf("ERROR: Failed to list own nodes for user %d: %v", claims.UserID, err)
+		log.Printf("ERROR: Failed to list own rich nodes for user %d: %v", claims.UserID, err)
 		http.Error(w, "Failed to list nodes", http.StatusInternalServerError)
 		return
 	}

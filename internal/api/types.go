@@ -34,18 +34,6 @@ type CopyNodeRequest struct {
 	NewName  *string `json:"new_name,omitempty" example:"Kopia Raportu"`
 }
 
-type NodeResponse struct {
-	ID         string    `json:"id" example:"_vx2a-43VqRT5wz_s9u4"`
-	OwnerID    int64     `json:"owner_id" example:"1"`
-	ParentID   *string   `json:"parent_id,omitempty" example:"fLW5kAh2ia9vYmjMnU4nZ"`
-	Name       string    `json:"name" example:"Raport_Q3.docx"`
-	NodeType   string    `json:"node_type" example:"file"`
-	SizeBytes  *int64    `json:"size_bytes,omitempty" example:"123456"`
-	MimeType   *string   `json:"mime_type,omitempty" example:"application/pdf"`
-	CreatedAt  time.Time `json:"created_at"`
-	ModifiedAt time.Time `json:"modified_at"`
-}
-
 type ShareRequest struct {
 	RecipientUsername string `json:"recipient_username" example:"user2"`
 	Permissions       string `json:"permissions" example:"read" enums:"read,write"`

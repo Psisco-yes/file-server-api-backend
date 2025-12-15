@@ -974,3 +974,44 @@ func TestGetSharesForNode(t *testing.T) {
 	require.Equal(t, "recipient2_getshares", shares[1].RecipientUsername)
 	require.Equal(t, "write", shares[1].Permissions)
 }
+
+func TestGetRichNodesByParentID(t *testing.T) {
+	owner := createTestUser(t, "owner_rich_nodes")
+	otherUser := createTestUser(t, "other_user_rich_nodes")
+
+	favFile := createTestNode(t, CreateNodeParams{ID: "rich_fav_file", OwnerID: owner.ID, Name: "My Favorite", NodeType: "file"})
+	err := testStore.AddFavorite(context.Background(), owner.ID, favFile.ID)
+	require.NoError(t, err)
+
+	sharedFile := createTestNode(t, CreateNodeParams{ID: "rich_shared_file", OwnerID: owner.ID, Name: "My Shared", NodeType: "file"})
+	createTestShare(t, ShareNodeParams{NodeID: sharedFile.ID, SharerID: owner.ID, RecipientID: otherUser.ID, Permissions: "read"})
+
+	plainFile := createTestNode(t, CreateNodeParams{ID: "rich_plain_file", OwnerID: owner.ID, Name: "My Plain", NodeType: "file"})
+
+	nodes, err := testStore.GetRichNodesByParentID(context.Background(), owner.ID, owner.ID, nil, 10, 0)
+	require.NoError(t, err)
+	require.Len(t, nodes, 3, "Should find 3 nodes in the root for the owner")
+
+	results := make(map[string]*models.RichNode)
+	for _, n := range nodes {
+		results[n.ID] = n
+	}
+
+	foundFav, ok := results[favFile.ID]
+	require.True(t, ok)
+	require.Equal(t, owner.Username, foundFav.Owner.Username)
+	require.True(t, foundFav.IsFavorited)
+	require.False(t, foundFav.IsShared)
+
+	foundShared, ok := results[sharedFile.ID]
+	require.True(t, ok)
+	require.Equal(t, owner.Username, foundShared.Owner.Username)
+	require.False(t, foundShared.IsFavorited)
+	require.True(t, foundShared.IsShared)
+
+	foundPlain, ok := results[plainFile.ID]
+	require.True(t, ok)
+	require.Equal(t, owner.Username, foundPlain.Owner.Username)
+	require.False(t, foundPlain.IsFavorited)
+	require.False(t, foundPlain.IsShared)
+}
