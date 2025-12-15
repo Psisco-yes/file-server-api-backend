@@ -225,6 +225,43 @@ const docTemplate = `{
                     "favorites"
                 ],
                 "summary": "List favorite nodes",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 100,
+                        "description": "Number of items to return",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 0,
+                        "description": "Offset for pagination",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "name",
+                            "size",
+                            "modifiedAt"
+                        ],
+                        "type": "string",
+                        "description": "Sort by field (name, size, modifiedAt)",
+                        "name": "sortBy",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "description": "Sort order (asc, desc)",
+                        "name": "sortOrder",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -430,6 +467,27 @@ const docTemplate = `{
                         "default": 0,
                         "description": "Offset for pagination",
                         "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "name",
+                            "size",
+                            "modifiedAt"
+                        ],
+                        "type": "string",
+                        "description": "Sort by field (name, size, modifiedAt)",
+                        "name": "sortBy",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "description": "Sort order (asc, desc)",
+                        "name": "sortOrder",
                         "in": "query"
                     }
                 ],
@@ -1267,6 +1325,27 @@ const docTemplate = `{
                         "description": "Offset for pagination",
                         "name": "offset",
                         "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "name",
+                            "size",
+                            "modifiedAt"
+                        ],
+                        "type": "string",
+                        "description": "Sort by field (name, size, modifiedAt)",
+                        "name": "sortBy",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "description": "Sort order (asc, desc)",
+                        "name": "sortOrder",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -1466,6 +1545,27 @@ const docTemplate = `{
                         "description": "Offset for pagination",
                         "name": "offset",
                         "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "name",
+                            "size",
+                            "modifiedAt"
+                        ],
+                        "type": "string",
+                        "description": "Sort by field (name, size, modifiedAt)",
+                        "name": "sortBy",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "description": "Sort order (asc, desc)",
+                        "name": "sortOrder",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -1655,6 +1755,43 @@ const docTemplate = `{
                     "trash"
                 ],
                 "summary": "List trash contents",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 100,
+                        "description": "Number of items to return",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 0,
+                        "description": "Offset for pagination",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "name",
+                            "size",
+                            "modifiedAt"
+                        ],
+                        "type": "string",
+                        "description": "Sort by field (name, size, modifiedAt)",
+                        "name": "sortBy",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "description": "Sort order (asc, desc)",
+                        "name": "sortOrder",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",

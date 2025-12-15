@@ -412,6 +412,32 @@ paths:
     get:
       description: Retrieves a list of all files and folders marked as favorite by
         the current user.
+      parameters:
+      - default: 100
+        description: Number of items to return
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset for pagination
+        in: query
+        name: offset
+        type: integer
+      - description: Sort by field (name, size, modifiedAt)
+        enum:
+        - name
+        - size
+        - modifiedAt
+        in: query
+        name: sortBy
+        type: string
+      - description: Sort order (asc, desc)
+        enum:
+        - asc
+        - desc
+        in: query
+        name: sortOrder
+        type: string
       produces:
       - application/json
       responses:
@@ -551,6 +577,21 @@ paths:
         in: query
         name: offset
         type: integer
+      - description: Sort by field (name, size, modifiedAt)
+        enum:
+        - name
+        - size
+        - modifiedAt
+        in: query
+        name: sortBy
+        type: string
+      - description: Sort order (asc, desc)
+        enum:
+        - asc
+        - desc
+        in: query
+        name: sortOrder
+        type: string
       produces:
       - application/json
       responses:
@@ -1111,6 +1152,21 @@ paths:
         in: query
         name: offset
         type: integer
+      - description: Sort by field (name, size, modifiedAt)
+        enum:
+        - name
+        - size
+        - modifiedAt
+        in: query
+        name: sortBy
+        type: string
+      - description: Sort order (asc, desc)
+        enum:
+        - asc
+        - desc
+        in: query
+        name: sortOrder
+        type: string
       produces:
       - application/json
       responses:
@@ -1281,6 +1337,21 @@ paths:
         in: query
         name: offset
         type: integer
+      - description: Sort by field (name, size, modifiedAt)
+        enum:
+        - name
+        - size
+        - modifiedAt
+        in: query
+        name: sortBy
+        type: string
+      - description: Sort order (asc, desc)
+        enum:
+        - asc
+        - desc
+        in: query
+        name: sortOrder
+        type: string
       produces:
       - application/json
       responses:
@@ -1368,6 +1439,32 @@ paths:
     get:
       description: Retrieves a list of all files and folders currently in the user's
         trash.
+      parameters:
+      - default: 100
+        description: Number of items to return
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset for pagination
+        in: query
+        name: offset
+        type: integer
+      - description: Sort by field (name, size, modifiedAt)
+        enum:
+        - name
+        - size
+        - modifiedAt
+        in: query
+        name: sortBy
+        type: string
+      - description: Sort order (asc, desc)
+        enum:
+        - asc
+        - desc
+        in: query
+        name: sortOrder
+        type: string
       produces:
       - application/json
       responses:

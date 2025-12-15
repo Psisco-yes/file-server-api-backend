@@ -371,7 +371,7 @@ func TestListRichDirectlySharedNodes(t *testing.T) {
 	err := testStore.AddFavorite(context.Background(), recipient.ID, node4_fav.ID)
 	require.NoError(t, err)
 
-	nodes, err := testStore.ListRichDirectlySharedNodes(context.Background(), recipient.ID, sharer.ID, 100, 0)
+	nodes, err := testStore.ListRichDirectlySharedNodes(context.Background(), recipient.ID, sharer.ID, 100, 0, "", "")
 	require.NoError(t, err)
 
 	require.Len(t, nodes, 3)
@@ -979,7 +979,7 @@ func TestGetRichNodesByParentID(t *testing.T) {
 
 	plainFile := createTestNode(t, CreateNodeParams{ID: "rich_plain_file", OwnerID: owner.ID, Name: "My Plain", NodeType: "file"})
 
-	nodes, err := testStore.GetRichNodesByParentID(context.Background(), owner.ID, owner.ID, nil, 10, 0)
+	nodes, err := testStore.GetRichNodesByParentID(context.Background(), owner.ID, owner.ID, nil, 10, 0, "", "")
 	require.NoError(t, err)
 	require.Len(t, nodes, 3, "Should find 3 nodes in the root for the owner")
 
@@ -1016,7 +1016,7 @@ func TestGetRichTrash(t *testing.T) {
 
 	createTestNode(t, CreateNodeParams{ID: "rich_trash_2", OwnerID: owner.ID, Name: "Not In Trash", NodeType: "file"})
 
-	trashItems, err := testStore.GetRichTrash(context.Background(), owner.ID, 10, 0)
+	trashItems, err := testStore.GetRichTrash(context.Background(), owner.ID, 10, 0, "", "")
 	require.NoError(t, err)
 
 	require.Len(t, trashItems, 1, "Should find exactly one item in trash")
@@ -1038,7 +1038,7 @@ func TestSearchRichNodes(t *testing.T) {
 	sharedNode := createTestNode(t, CreateNodeParams{ID: "search_shared_B_to_A", OwnerID: userB.ID, Name: "Wspólny Dokument B", NodeType: "file"})
 	createTestShare(t, ShareNodeParams{NodeID: sharedNode.ID, SharerID: userB.ID, RecipientID: userA.ID, Permissions: "read"})
 
-	results, err := testStore.SearchRichNodes(context.Background(), userA.ID, "Dokument", 10, 0)
+	results, err := testStore.SearchRichNodes(context.Background(), userA.ID, "Dokument", 10, 0, "", "")
 	require.NoError(t, err)
 
 	require.Len(t, results, 2)

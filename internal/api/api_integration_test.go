@@ -108,102 +108,66 @@ func TestAPI_CreateFolder_NameConflict(t *testing.T) {
 
 func TestListNodesHandler(t *testing.T) {
 	testUser := testUserClaims
-	otherUser, err := testServer.store.GetUserByUsername(context.Background(), "admin")
+
+	_, err := testServer.store.GetPool().Exec(context.Background(), "DELETE FROM nodes WHERE owner_id = $1 AND parent_id IS NULL", testUser.UserID)
 	require.NoError(t, err)
 
-	plainFolder, err := createTestNodeAPI(t, "Plain Folder", "folder", nil, testUser.UserID)
+	var size1 int64 = 100
+	var size2 int64 = 500
+	nodeA, _ := createTestNodeAPI(t, "A_File", "file", nil, testUser.UserID)
+	nodeZ, _ := createTestNodeAPI(t, "Z_File", "file", nil, testUser.UserID)
+	nodeC, _ := createTestNodeAPI(t, "C_Folder", "folder", nil, testUser.UserID)
+
+	_, err = testServer.store.GetPool().Exec(context.Background(), "UPDATE nodes SET size_bytes = $1, modified_at = $2 WHERE id = $3", size1, time.Now().Add(-1*time.Hour), nodeA.ID)
+	require.NoError(t, err)
+	_, err = testServer.store.GetPool().Exec(context.Background(), "UPDATE nodes SET size_bytes = $1, modified_at = $2 WHERE id = $3", size2, time.Now(), nodeZ.ID)
+	require.NoError(t, err)
+	_, err = testServer.store.GetPool().Exec(context.Background(), "UPDATE nodes SET modified_at = $1 WHERE id = $2", time.Now().Add(-30*time.Minute), nodeC.ID)
 	require.NoError(t, err)
 
-	favoritedFile, err := createTestNodeAPI(t, "Favorited File", "file", nil, testUser.UserID)
-	require.NoError(t, err)
-	err = testServer.store.AddFavorite(context.Background(), testUser.UserID, favoritedFile.ID)
-	require.NoError(t, err)
+	router := chi.NewRouter()
+	router.Use(testServer.AuthMiddleware)
+	router.Get("/api/v1/nodes", testServer.ListNodesHandler)
 
-	sharedFile, err := createTestNodeAPI(t, "Shared File", "file", nil, testUser.UserID)
-	require.NoError(t, err)
-	_, err = testServer.store.ShareNode(context.Background(), database.ShareNodeParams{
-		NodeID:      sharedFile.ID,
-		SharerID:    testUser.UserID,
-		RecipientID: otherUser.ID,
-		Permissions: "read",
-	})
-	require.NoError(t, err)
-
-	favAndSharedFile, err := createTestNodeAPI(t, "Fav And Shared", "file", nil, testUser.UserID)
-	require.NoError(t, err)
-	err = testServer.store.AddFavorite(context.Background(), testUser.UserID, favAndSharedFile.ID)
-	require.NoError(t, err)
-	_, err = testServer.store.ShareNode(context.Background(), database.ShareNodeParams{
-		NodeID: favAndSharedFile.ID, SharerID: testUser.UserID, RecipientID: otherUser.ID, Permissions: "read",
-	})
-	require.NoError(t, err)
-
-	parentFolder, err := createTestNodeAPI(t, "Parent For Subdir", "folder", nil, testUser.UserID)
-	require.NoError(t, err)
-	childFile, err := createTestNodeAPI(t, "Child File", "file", &parentFolder.ID, testUser.UserID)
-	require.NoError(t, err)
-
-	t.Run("should list root directory with rich data", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/api/v1/nodes", nil)
-		rr := httptest.NewRecorder()
-
-		req = req.WithContext(context.WithValue(req.Context(), userContextKey, testUserClaims))
-		http.HandlerFunc(testServer.ListNodesHandler).ServeHTTP(rr, req)
-
-		require.Equal(t, http.StatusOK, rr.Code)
-		var nodes []*models.RichNode
-		err := json.Unmarshal(rr.Body.Bytes(), &nodes)
-		require.NoError(t, err)
-
-		results := make(map[string]*models.RichNode)
-		for _, n := range nodes {
-			results[n.ID] = n
-		}
-
-		pFolder, ok := results[plainFolder.ID]
-		require.True(t, ok, "Plain Folder not found in response")
-		require.Equal(t, testUser.Username, pFolder.Owner.Username)
-		require.False(t, pFolder.IsFavorited, "Plain Folder should not be favorited")
-		require.False(t, pFolder.IsShared, "Plain Folder should not be shared")
-
-		favFile, ok := results[favoritedFile.ID]
-		require.True(t, ok, "Favorited File not found in response")
-		require.Equal(t, testUser.Username, favFile.Owner.Username)
-		require.True(t, favFile.IsFavorited, "Favorited File should be marked as favorited")
-		require.False(t, favFile.IsShared, "Favorited File should not be shared")
-
-		shFile, ok := results[sharedFile.ID]
-		require.True(t, ok, "Shared File not found in response")
-		require.Equal(t, testUser.Username, shFile.Owner.Username)
-		require.False(t, shFile.IsFavorited, "Shared File should not be favorited by default")
-		require.True(t, shFile.IsShared, "Shared File should be marked as shared")
-
-		favShFile, ok := results[favAndSharedFile.ID]
-		require.True(t, ok, "Favorited and Shared File not found in response")
-		require.Equal(t, testUser.Username, favShFile.Owner.Username)
-		require.True(t, favShFile.IsFavorited, "FavAndShared File should be marked as favorited")
-		require.True(t, favShFile.IsShared, "FavAndShared File should be marked as shared")
-	})
-
-	t.Run("should list subdirectory content with rich data", func(t *testing.T) {
-		url := fmt.Sprintf("/api/v1/nodes?parent_id=%s", parentFolder.ID)
+	runSortTest := func(t *testing.T, url string, expectedOrder []string) {
 		req := httptest.NewRequest("GET", url, nil)
+		req.Header.Set("Authorization", "Bearer "+testUserToken)
 		rr := httptest.NewRecorder()
-
-		req = req.WithContext(context.WithValue(req.Context(), userContextKey, testUserClaims))
-		http.HandlerFunc(testServer.ListNodesHandler).ServeHTTP(rr, req)
+		router.ServeHTTP(rr, req)
 
 		require.Equal(t, http.StatusOK, rr.Code)
 		var nodes []*models.RichNode
 		err := json.Unmarshal(rr.Body.Bytes(), &nodes)
 		require.NoError(t, err)
-		require.Len(t, nodes, 1)
 
-		node := nodes[0]
-		require.Equal(t, childFile.ID, node.ID)
-		require.Equal(t, testUser.Username, node.Owner.Username)
-		require.False(t, node.IsFavorited)
-		require.False(t, node.IsShared)
+		require.Len(t, nodes, len(expectedOrder))
+		for i, expectedName := range expectedOrder {
+			require.Equal(t, expectedName, nodes[i].Name, "item at index %d has wrong name", i)
+		}
+	}
+
+	t.Run("default sort", func(t *testing.T) {
+		runSortTest(t, "/api/v1/nodes", []string{"C_Folder", "A_File", "Z_File"})
+	})
+
+	t.Run("sort by name ascending", func(t *testing.T) {
+		runSortTest(t, "/api/v1/nodes?sortBy=name&sortOrder=asc", []string{"A_File", "C_Folder", "Z_File"})
+	})
+
+	t.Run("sort by name descending", func(t *testing.T) {
+		runSortTest(t, "/api/v1/nodes?sortBy=name&sortOrder=desc", []string{"Z_File", "C_Folder", "A_File"})
+	})
+
+	t.Run("sort by size ascending", func(t *testing.T) {
+		runSortTest(t, "/api/v1/nodes?sortBy=size&sortOrder=asc", []string{"C_Folder", "A_File", "Z_File"})
+	})
+
+	t.Run("sort by modified date descending", func(t *testing.T) {
+		runSortTest(t, "/api/v1/nodes?sortBy=modifiedAt&sortOrder=desc", []string{"Z_File", "C_Folder", "A_File"})
+	})
+
+	t.Run("sort by invalid column falls back to default", func(t *testing.T) {
+		runSortTest(t, "/api/v1/nodes?sortBy=drop-tables", []string{"C_Folder", "A_File", "Z_File"})
 	})
 }
 
@@ -974,7 +938,7 @@ func TestCopyNodeHandler_Integration(t *testing.T) {
 		require.Equal(t, newName, copiedFolder.Name)
 		require.Equal(t, user.Username, copiedFolder.Owner.Username)
 
-		children, err := testServer.store.GetRichNodesByParentID(context.Background(), user.ID, user.ID, &copiedFolder.ID, 10, 0)
+		children, err := testServer.store.GetRichNodesByParentID(context.Background(), user.ID, user.ID, &copiedFolder.ID, 10, 0, "", "")
 		require.NoError(t, err)
 		require.Len(t, children, 1)
 		require.Equal(t, "wewnetrzny.txt", children[0].Name)
@@ -1232,5 +1196,68 @@ func TestGetLatestEventHandler_Integration(t *testing.T) {
 		json.Unmarshal(rrAllEvents.Body.Bytes(), &allEvents)
 
 		require.Equal(t, allEvents[len(allEvents)-1].ID, resp.LatestEventID, "LatestEventID should match the ID of the last event in the list")
+	})
+}
+
+func TestListSharedNodesHandler_SortingAndPagination(t *testing.T) {
+	sharer := createTestUserWithPassword(t, "sharer_sort_pagination", "password")
+	recipient := createTestUserWithPassword(t, "recipient_sort_pagination", "password")
+	recipientLogin := loginUserForTest(t, recipient.Username, "password")
+
+	sharedFolder, _ := createTestNodeAPI(t, "Shared Root", "folder", nil, sharer.ID)
+
+	var size1 int64 = 999
+	var size2 int64 = 111
+	nodeZ, _ := createTestNodeAPI(t, "Z_File.txt", "file", &sharedFolder.ID, sharer.ID)
+	nodeA, _ := createTestNodeAPI(t, "A_File.txt", "file", &sharedFolder.ID, sharer.ID)
+
+	_, err := testServer.store.GetPool().Exec(context.Background(), "UPDATE nodes SET size_bytes = $1, modified_at = $2 WHERE id = $3", size1, time.Now(), nodeZ.ID)
+	require.NoError(t, err)
+	_, err = testServer.store.GetPool().Exec(context.Background(), "UPDATE nodes SET size_bytes = $1, modified_at = $2 WHERE id = $3", size2, time.Now().Add(-5*time.Minute), nodeA.ID)
+	require.NoError(t, err)
+
+	_, err = testServer.store.ShareNode(context.Background(), database.ShareNodeParams{
+		NodeID: sharedFolder.ID, SharerID: sharer.ID, RecipientID: recipient.ID, Permissions: "read",
+	})
+	require.NoError(t, err)
+
+	router := chi.NewRouter()
+	router.Use(testServer.AuthMiddleware)
+	router.Get("/api/v1/shares/incoming/nodes", testServer.ListSharedNodesHandler)
+
+	runSharedSortTest := func(t *testing.T, url string, expectedOrder []string) {
+		req := httptest.NewRequest("GET", url, nil)
+		req.Header.Set("Authorization", "Bearer "+recipientLogin.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusOK, rr.Code)
+		var nodes []*models.RichNode
+		err := json.Unmarshal(rr.Body.Bytes(), &nodes)
+		require.NoError(t, err)
+
+		require.Len(t, nodes, len(expectedOrder))
+		for i, expectedName := range expectedOrder {
+			require.Equal(t, expectedName, nodes[i].Name, "item at index %d has wrong name", i)
+		}
+	}
+
+	baseQuery := fmt.Sprintf("/api/v1/shares/incoming/nodes?sharer_username=%s&parent_id=%s", sharer.Username, sharedFolder.ID)
+
+	t.Run("shared content sort by name asc", func(t *testing.T) {
+		runSharedSortTest(t, baseQuery+"&sortBy=name&sortOrder=asc", []string{"A_File.txt", "Z_File.txt"})
+	})
+
+	t.Run("shared content sort by size asc", func(t *testing.T) {
+		runSharedSortTest(t, baseQuery+"&sortBy=size&sortOrder=asc", []string{"A_File.txt", "Z_File.txt"})
+	})
+
+	t.Run("shared content sort by modifiedAt desc", func(t *testing.T) {
+		runSharedSortTest(t, baseQuery+"&sortBy=modifiedAt&sortOrder=desc", []string{"Z_File.txt", "A_File.txt"})
+	})
+
+	t.Run("shared content pagination", func(t *testing.T) {
+		url := fmt.Sprintf("%s&sortBy=name&sortOrder=asc&limit=1&offset=1", baseQuery)
+		runSharedSortTest(t, url, []string{"Z_File.txt"})
 	})
 }

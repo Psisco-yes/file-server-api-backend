@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"serwer-plikow/internal/models"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -253,7 +254,9 @@ func (q *Queries) GetSharingUsers(ctx context.Context, recipientID int64, limit 
 	return users, nil
 }
 
-func (q *Queries) ListRichDirectlySharedNodes(ctx context.Context, recipientID int64, sharerID int64, limit int, offset int) ([]*models.RichNode, error) {
+func (q *Queries) ListRichDirectlySharedNodes(ctx context.Context, recipientID int64, sharerID int64, limit int, offset int, sortBy string, sortOrder string) ([]*models.RichNode, error) {
+	orderByClause := buildOrderByClause(sortBy, sortOrder)
+
 	query := fmt.Sprintf(`
 		SELECT %s
 		FROM nodes n
@@ -261,9 +264,9 @@ func (q *Queries) ListRichDirectlySharedNodes(ctx context.Context, recipientID i
 		JOIN shares s ON n.id = s.node_id
 		LEFT JOIN user_favorites fav ON n.id = fav.node_id AND fav.user_id = $1
 		WHERE s.recipient_id = $1 AND s.sharer_id = $2 AND n.deleted_at IS NULL
-		ORDER BY n.node_type DESC, n.name
+		%s
 		LIMIT $3 OFFSET $4
-	`, richNodeFields)
+	`, richNodeFields, orderByClause)
 
 	rows, err := q.db.Query(ctx, query, recipientID, sharerID, limit, offset)
 	if err != nil {
@@ -1239,26 +1242,28 @@ func (q *Queries) GetRichNodeIfAccessible(ctx context.Context, nodeID string, us
 	return nil, nil
 }
 
-func (q *Queries) GetRichNodesByParentID(ctx context.Context, ownerID int64, requesterID int64, parentID *string, limit int, offset int) ([]*models.RichNode, error) {
+func (q *Queries) GetRichNodesByParentID(ctx context.Context, ownerID int64, requesterID int64, parentID *string, limit int, offset int, sortBy string, sortOrder string) ([]*models.RichNode, error) {
 	var query string
 	var args []interface{}
 
+	orderByClause := buildOrderByClause(sortBy, sortOrder)
+
 	baseQuery := fmt.Sprintf(`
-        SELECT %s
-        FROM nodes n
-        JOIN users u ON n.owner_id = u.id
-        LEFT JOIN user_favorites fav ON n.id = fav.node_id AND fav.user_id = $1
-    `, richNodeFields)
+		SELECT %s
+		FROM nodes n
+		JOIN users u ON n.owner_id = u.id
+		LEFT JOIN user_favorites fav ON n.id = fav.node_id AND fav.user_id = $1
+	`, richNodeFields)
 
 	args = append(args, requesterID)
 
 	if parentID == nil {
 		query = fmt.Sprintf(`%s WHERE n.owner_id = $2 AND n.parent_id IS NULL AND n.deleted_at IS NULL
-                             ORDER BY n.node_type DESC, n.name LIMIT $3 OFFSET $4`, baseQuery)
+                             %s LIMIT $3 OFFSET $4`, baseQuery, orderByClause)
 		args = append(args, ownerID, limit, offset)
 	} else {
 		query = fmt.Sprintf(`%s WHERE n.owner_id = $2 AND n.parent_id = $3 AND n.deleted_at IS NULL
-                             ORDER BY n.node_type DESC, n.name LIMIT $4 OFFSET $5`, baseQuery)
+                             %s LIMIT $4 OFFSET $5`, baseQuery, orderByClause)
 		args = append(args, ownerID, *parentID, limit, offset)
 	}
 
@@ -1326,15 +1331,17 @@ func (q *Queries) GetRichNodePath(ctx context.Context, nodeID string, requesterI
 	return pathNodes, nil
 }
 
-func (q *Queries) GetRichFavorites(ctx context.Context, requesterID int64, limit int, offset int) ([]*models.RichNode, error) {
+func (q *Queries) GetRichFavorites(ctx context.Context, requesterID int64, limit int, offset int, sortBy string, sortOrder string) ([]*models.RichNode, error) {
+	orderByClause := buildOrderByClause(sortBy, sortOrder)
+
 	query := fmt.Sprintf(`
 		SELECT %s
 		FROM nodes n
 		JOIN users u ON n.owner_id = u.id
 		JOIN user_favorites fav ON n.id = fav.node_id AND fav.user_id = $1
 		WHERE n.deleted_at IS NULL
-		ORDER BY n.name LIMIT $2 OFFSET $3
-	`, richNodeFields)
+		%s LIMIT $2 OFFSET $3
+	`, richNodeFields, orderByClause)
 
 	rows, err := q.db.Query(ctx, query, requesterID, limit, offset)
 	if err != nil {
@@ -1358,15 +1365,17 @@ func (q *Queries) GetRichFavorites(ctx context.Context, requesterID int64, limit
 	return nodes, nil
 }
 
-func (q *Queries) GetRichTrash(ctx context.Context, ownerID int64, limit int, offset int) ([]*models.RichNode, error) {
+func (q *Queries) GetRichTrash(ctx context.Context, ownerID int64, limit int, offset int, sortBy string, sortOrder string) ([]*models.RichNode, error) {
+	orderByClause := buildOrderByClause(sortBy, sortOrder)
+
 	query := fmt.Sprintf(`
 		SELECT %s
 		FROM nodes n
 		JOIN users u ON n.owner_id = u.id
 		LEFT JOIN user_favorites fav ON n.id = fav.node_id AND fav.user_id = $1
 		WHERE n.owner_id = $1 AND n.deleted_at IS NOT NULL
-		ORDER BY n.deleted_at DESC LIMIT $2 OFFSET $3
-	`, richNodeFields)
+		%s LIMIT $2 OFFSET $3
+	`, richNodeFields, orderByClause)
 
 	rows, err := q.db.Query(ctx, query, ownerID, limit, offset)
 	if err != nil {
@@ -1390,8 +1399,9 @@ func (q *Queries) GetRichTrash(ctx context.Context, ownerID int64, limit int, of
 	return nodes, nil
 }
 
-func (q *Queries) SearchRichNodes(ctx context.Context, requesterID int64, searchQuery string, limit int, offset int) ([]*models.RichNode, error) {
+func (q *Queries) SearchRichNodes(ctx context.Context, requesterID int64, searchQuery string, limit int, offset int, sortBy string, sortOrder string) ([]*models.RichNode, error) {
 	likeQuery := "%" + searchQuery + "%"
+	orderByClause := buildOrderByClause(sortBy, sortOrder)
 
 	query := fmt.Sprintf(`
 		WITH accessible_nodes AS (
@@ -1413,9 +1423,9 @@ func (q *Queries) SearchRichNodes(ctx context.Context, requesterID int64, search
 		JOIN users u ON n.owner_id = u.id
 		LEFT JOIN user_favorites fav ON n.id = fav.node_id AND fav.user_id = $1
 		WHERE n.id IN (SELECT id FROM accessible_nodes) AND n.name ILIKE $2
-		ORDER BY n.name
+		%s
 		LIMIT $3 OFFSET $4
-	`, richNodeFields)
+	`, richNodeFields, orderByClause)
 
 	rows, err := q.db.Query(ctx, query, requesterID, likeQuery, limit, offset)
 	if err != nil {
@@ -1437,4 +1447,29 @@ func (q *Queries) SearchRichNodes(ctx context.Context, requesterID int64, search
 	}
 
 	return nodes, nil
+}
+
+func buildOrderByClause(sortBy, sortOrder string) string {
+	var column string
+	switch sortBy {
+	case "name":
+		column = "n.name"
+	case "size":
+		column = "n.size_bytes"
+	case "modifiedAt":
+		column = "n.modified_at"
+	default:
+		return "ORDER BY n.node_type DESC, n.name ASC"
+	}
+
+	order := "ASC"
+	if strings.ToUpper(sortOrder) == "DESC" {
+		order = "DESC"
+	}
+
+	if column == "n.size_bytes" {
+		return fmt.Sprintf("ORDER BY n.node_type DESC, %s %s NULLS LAST", column, order)
+	}
+
+	return fmt.Sprintf("ORDER BY %s %s", column, order)
 }
