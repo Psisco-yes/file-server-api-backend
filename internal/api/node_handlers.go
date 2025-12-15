@@ -1073,6 +1073,7 @@ func (s *Server) CopyNodeHandler(w http.ResponseWriter, r *http.Request) {
 // @Produce      json
 // @Security     BearerAuth
 // @Param        nodeId   path      string  true  "The ID of the node to retrieve"
+// @Param        share_context  query     string  false  "The ID of the root shared node, used to calculate relative paths for breadcrumbs."
 // @Success      200      {object}  NodeDetailResponse
 // @Failure      401      {string}  string "Unauthorized"
 // @Failure      404      {string}  string "Not Found"
@@ -1081,6 +1082,7 @@ func (s *Server) CopyNodeHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) GetNodeHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 	nodeID := chi.URLParam(r, "nodeId")
+	shareContextID := r.URL.Query().Get("share_context")
 
 	richNode, err := s.store.GetRichNodeIfAccessible(r.Context(), nodeID, claims.UserID)
 	if err != nil {
@@ -1096,6 +1098,19 @@ func (s *Server) GetNodeHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "Failed to retrieve node path", http.StatusInternalServerError)
 		return
+	}
+
+	if shareContextID != "" && richNode.Owner.ID != claims.UserID {
+		shareRootIndex := -1
+		for i, p := range path {
+			if p.ID == shareContextID {
+				shareRootIndex = i
+				break
+			}
+		}
+		if shareRootIndex != -1 {
+			path = path[shareRootIndex+1:]
+		}
 	}
 
 	response := NodeDetailResponse{

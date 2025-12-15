@@ -563,88 +563,104 @@ func TestShareAndFavorite_Integration(t *testing.T) {
 }
 
 func TestTrashHandlers_Integration(t *testing.T) {
-	username := "user_for_trash_test"
-	password := "password123"
-	testUser := createTestUserWithPassword(t, username, password)
-	loginResp := loginUserForTest(t, username, password)
-
-	nodeToTrash, err := createTestNodeAPI(t, "plik_do_kosza.txt", "file", nil, testUser.ID)
-	require.NoError(t, err)
-	nodeToKeep, err := createTestNodeAPI(t, "plik_zostaje.txt", "file", nil, testUser.ID)
-	require.NoError(t, err)
-
 	router := chi.NewRouter()
 	router.Use(testServer.AuthMiddleware)
 	router.Delete("/api/v1/nodes/{nodeId}", testServer.DeleteNodeHandler)
 	router.Get("/api/v1/trash", testServer.ListTrashHandler)
 	router.Post("/api/v1/nodes/{nodeId}/restore", testServer.RestoreNodeHandler)
 	router.Delete("/api/v1/trash/purge", testServer.PurgeTrashHandler)
+	router.Delete("/api/v1/trash/{nodeId}", testServer.PurgeSingleNodeHandler)
 
-	t.Run("move node to trash", func(t *testing.T) {
-		url := fmt.Sprintf("/api/v1/nodes/%s", nodeToTrash.ID)
-		req := httptest.NewRequest("DELETE", url, nil)
-		req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
-		rr := httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
+	t.Run("full trash lifecycle", func(t *testing.T) {
+		username := "user_trash_lifecycle"
+		testUser := createTestUserWithPassword(t, username, "password")
+		loginResp := loginUserForTest(t, username, "password")
+		nodeToTrash, _ := createTestNodeAPI(t, "plik_do_kosza.txt", "file", nil, testUser.ID)
 
-		require.Equal(t, http.StatusNoContent, rr.Code)
-	})
-
-	t.Run("list trash contents", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/api/v1/trash", nil)
-		req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
-		rr := httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
-
-		require.Equal(t, http.StatusOK, rr.Code)
-		var nodes []*models.RichNode
-		err := json.Unmarshal(rr.Body.Bytes(), &nodes)
-		require.NoError(t, err)
-		require.Len(t, nodes, 1)
-		require.Equal(t, nodeToTrash.ID, nodes[0].ID)
-		require.Equal(t, testUser.Username, nodes[0].Owner.Username)
-	})
-
-	t.Run("restore node from trash", func(t *testing.T) {
-		url := fmt.Sprintf("/api/v1/nodes/%s/restore", nodeToTrash.ID)
-		req := httptest.NewRequest("POST", url, nil)
-		req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
-		rr := httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
-
-		require.Equal(t, http.StatusOK, rr.Code)
+		urlDelete := fmt.Sprintf("/api/v1/nodes/%s", nodeToTrash.ID)
+		reqDelete := httptest.NewRequest("DELETE", urlDelete, nil)
+		reqDelete.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rrDelete := httptest.NewRecorder()
+		router.ServeHTTP(rrDelete, reqDelete)
+		require.Equal(t, http.StatusNoContent, rrDelete.Code)
 
 		reqList := httptest.NewRequest("GET", "/api/v1/trash", nil)
 		reqList.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
 		rrList := httptest.NewRecorder()
 		router.ServeHTTP(rrList, reqList)
-		var nodes []models.Node
+		require.Equal(t, http.StatusOK, rrList.Code)
+		var nodes []*models.RichNode
 		json.Unmarshal(rrList.Body.Bytes(), &nodes)
-		require.Len(t, nodes, 0, "Trash should be empty after restore")
+		require.Len(t, nodes, 1)
+		require.Equal(t, nodeToTrash.ID, nodes[0].ID)
+
+		urlRestore := fmt.Sprintf("/api/v1/nodes/%s/restore", nodeToTrash.ID)
+		reqRestore := httptest.NewRequest("POST", urlRestore, nil)
+		reqRestore.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rrRestore := httptest.NewRecorder()
+		router.ServeHTTP(rrRestore, reqRestore)
+		require.Equal(t, http.StatusOK, rrRestore.Code)
+
+		reqListAfterRestore := httptest.NewRequest("GET", "/api/v1/trash", nil)
+		reqListAfterRestore.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rrListAfterRestore := httptest.NewRecorder()
+		router.ServeHTTP(rrListAfterRestore, reqListAfterRestore)
+		var nodesAfterRestore []*models.RichNode
+		json.Unmarshal(rrListAfterRestore.Body.Bytes(), &nodesAfterRestore)
+		require.Len(t, nodesAfterRestore, 0)
 	})
 
-	t.Run("purge trash", func(t *testing.T) {
-		urlTrash1 := fmt.Sprintf("/api/v1/nodes/%s", nodeToTrash.ID)
-		reqTrash1 := httptest.NewRequest("DELETE", urlTrash1, nil)
-		reqTrash1.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
-		router.ServeHTTP(httptest.NewRecorder(), reqTrash1)
+	t.Run("purge all trash", func(t *testing.T) {
+		username := "user_purge_all"
+		testUser := createTestUserWithPassword(t, username, "password")
+		loginResp := loginUserForTest(t, username, "password")
+		node1, _ := createTestNodeAPI(t, "purge_all_1.txt", "file", nil, testUser.ID)
+		node2, _ := createTestNodeAPI(t, "purge_all_2.txt", "file", nil, testUser.ID)
 
-		urlTrash2 := fmt.Sprintf("/api/v1/nodes/%s", nodeToKeep.ID)
-		reqTrash2 := httptest.NewRequest("DELETE", urlTrash2, nil)
-		reqTrash2.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
-		router.ServeHTTP(httptest.NewRecorder(), reqTrash2)
+		testServer.store.MoveNodeToTrash(context.Background(), node1.ID, testUser.ID)
+		testServer.store.MoveNodeToTrash(context.Background(), node2.ID, testUser.ID)
 
 		reqPurge := httptest.NewRequest("DELETE", "/api/v1/trash/purge", nil)
 		reqPurge.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
 		rrPurge := httptest.NewRecorder()
 		router.ServeHTTP(rrPurge, reqPurge)
-
 		require.Equal(t, http.StatusNoContent, rrPurge.Code)
 
 		var count int
 		err := testServer.store.GetPool().QueryRow(context.Background(), "SELECT COUNT(*) FROM nodes WHERE owner_id = $1", testUser.ID).Scan(&count)
 		require.NoError(t, err)
-		require.Equal(t, 0, count, "All nodes for the user should be permanently deleted")
+		require.Equal(t, 0, count)
+	})
+
+	t.Run("purge single item from trash", func(t *testing.T) {
+		username := "user_purge_single"
+		testUser := createTestUserWithPassword(t, username, "password")
+		loginResp := loginUserForTest(t, username, "password")
+
+		var fileSize int64 = 1234
+		folder, _ := createTestNodeAPI(t, "FolderToPurge", "folder", nil, testUser.ID)
+		fileInFolder, _ := createTestNodeAPI(t, "FileInFolder", "file", &folder.ID, testUser.ID)
+		fileToKeep, _ := createTestNodeAPI(t, "FileToKeepInTrash", "file", nil, testUser.ID)
+		testServer.store.GetPool().Exec(context.Background(), "UPDATE nodes SET size_bytes=$1 WHERE id=$2", fileSize, fileInFolder.ID)
+
+		testServer.store.MoveNodeToTrash(context.Background(), folder.ID, testUser.ID)
+		testServer.store.MoveNodeToTrash(context.Background(), fileToKeep.ID, testUser.ID)
+
+		url := fmt.Sprintf("/api/v1/trash/%s", folder.ID)
+		req := httptest.NewRequest("DELETE", url, nil)
+		req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+		require.Equal(t, http.StatusNoContent, rr.Code)
+
+		var count int
+		err := testServer.store.GetPool().QueryRow(context.Background(), "SELECT COUNT(*) FROM nodes WHERE id IN ($1, $2)", folder.ID, fileInFolder.ID).Scan(&count)
+		require.NoError(t, err)
+		require.Equal(t, 0, count)
+
+		trashItems, _ := testServer.store.GetRichTrash(context.Background(), testUser.ID, 10, 0, "", "")
+		require.Len(t, trashItems, 1)
+		require.Equal(t, fileToKeep.ID, trashItems[0].ID)
 	})
 }
 

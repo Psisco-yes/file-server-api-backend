@@ -1473,3 +1473,45 @@ func buildOrderByClause(sortBy, sortOrder string) string {
 
 	return fmt.Sprintf("ORDER BY %s %s", column, order)
 }
+
+func (q *Queries) PurgeSingleNode(ctx context.Context, ownerID int64, nodeID string) (int, []string, int64, error) {
+	query := `
+		WITH RECURSIVE nodes_to_find AS (
+			SELECT id, original_parent_id 
+			FROM nodes
+			WHERE id = $2 AND owner_id = $1 AND deleted_at IS NOT NULL
+
+			UNION ALL
+
+			SELECT n.id, n.original_parent_id
+			FROM nodes n
+			JOIN nodes_to_find ntf ON n.original_parent_id = ntf.id
+		),
+		deleted_summary AS (
+			DELETE FROM nodes WHERE id IN (SELECT id FROM nodes_to_find)
+			RETURNING id, node_type, size_bytes
+		)
+		SELECT 
+			(SELECT COUNT(*) FROM deleted_summary),
+			(SELECT array_agg(id) FROM deleted_summary WHERE node_type = 'file'),
+			COALESCE((SELECT sum(size_bytes) FROM deleted_summary WHERE node_type = 'file'), 0)
+	`
+
+	var totalNodesDeleted int
+	var deletedFileIDs []string
+	var totalSizeFreed int64
+
+	err := q.db.QueryRow(ctx, query, ownerID, nodeID).Scan(&totalNodesDeleted, &deletedFileIDs, &totalSizeFreed)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, []string{}, 0, nil
+		}
+		return 0, nil, 0, err
+	}
+
+	if deletedFileIDs == nil {
+		deletedFileIDs = []string{}
+	}
+
+	return totalNodesDeleted, deletedFileIDs, totalSizeFreed, nil
+}

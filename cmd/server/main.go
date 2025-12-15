@@ -130,6 +130,7 @@ func main() {
 			r.Route("/trash", func(r chi.Router) {
 				r.Get("/", server.ListTrashHandler)
 				r.Delete("/purge", server.PurgeTrashHandler)
+				r.Delete("/{nodeId}", server.PurgeSingleNodeHandler)
 			})
 
 			r.Route("/events", func(r chi.Router) {
