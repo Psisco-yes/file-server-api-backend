@@ -555,7 +555,7 @@ func (q *Queries) MoveNodeToTrash(ctx context.Context, id string, ownerID int64)
 
 	updateQuery := `
 		UPDATE nodes
-		SET deleted_at = $1, original_parent_id = parent_id, parent_id = NULL
+		SET deleted_at = $1, original_parent_id = parent_id
 		WHERE id = ANY($2)
 	`
 	_, err = q.db.Exec(ctx, updateQuery, now, nodeIDs)
@@ -699,26 +699,75 @@ func (q *Queries) ListTrash(ctx context.Context, ownerID int64, limit int, offse
 	return nodes, nil
 }
 
-// TODO: Ta funkcja nie obsługuje rekurencyjnego przywracania! Przywraca tylko jeden node.
-func (q *Queries) RestoreNode(ctx context.Context, id string, ownerID int64) (bool, error) {
-	query := `
-		UPDATE nodes
-		SET 
-			deleted_at = NULL,
-			parent_id = original_parent_id,
-			original_parent_id = NULL
-		WHERE id = $1 AND owner_id = $2 AND deleted_at IS NOT NULL
-	`
-	res, err := q.db.Exec(ctx, query, id, ownerID)
+func (q *Queries) RestoreNode(ctx context.Context, nodeID string, ownerID int64, renameOnConflict bool) ([]string, int64, error) {
+	var originalName string
+	var originalParentID *string
+	err := q.db.QueryRow(ctx, "SELECT name, original_parent_id FROM nodes WHERE id = $1 AND owner_id = $2 AND deleted_at IS NOT NULL", nodeID, ownerID).Scan(&originalName, &originalParentID)
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return false, ErrDuplicateNodeName
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, 0, ErrNodeNotFound
 		}
-		return false, err
+		return nil, 0, err
 	}
 
-	return res.RowsAffected() > 0, nil
+	var conflictExists bool
+	if originalParentID == nil {
+		checkConflictQuery := `SELECT EXISTS(SELECT 1 FROM nodes WHERE owner_id = $1 AND parent_id IS NULL AND name = $2 AND deleted_at IS NULL)`
+		err = q.db.QueryRow(ctx, checkConflictQuery, ownerID, originalName).Scan(&conflictExists)
+	} else {
+		checkConflictQuery := `SELECT EXISTS(SELECT 1 FROM nodes WHERE owner_id = $1 AND parent_id = $2 AND name = $3 AND deleted_at IS NULL)`
+		err = q.db.QueryRow(ctx, checkConflictQuery, ownerID, *originalParentID, originalName).Scan(&conflictExists)
+	}
+	if err != nil {
+		return nil, 0, err
+	}
+
+	finalName := originalName
+	if conflictExists {
+		if !renameOnConflict {
+			return nil, 0, ErrDuplicateNodeName
+		}
+		finalName, err = q.findAvailableName(ctx, ownerID, originalParentID, originalName)
+		if err != nil {
+			return nil, 0, err
+		}
+	}
+
+	query := `
+		WITH RECURSIVE nodes_to_restore AS (
+			SELECT id FROM nodes WHERE id = $2 AND owner_id = $1 AND deleted_at IS NOT NULL
+			UNION ALL
+			SELECT n.id FROM nodes n JOIN nodes_to_restore ntr ON n.original_parent_id = ntr.id
+		)
+		UPDATE nodes
+		SET
+			deleted_at = NULL,
+			parent_id = original_parent_id,
+			original_parent_id = NULL,
+			name = CASE WHEN id = $2 THEN $3 ELSE name END
+		WHERE id IN (SELECT id FROM nodes_to_restore)
+		RETURNING id
+	`
+
+	rows, err := q.db.Query(ctx, query, ownerID, nodeID, finalName)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var restoredIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, 0, err
+		}
+		restoredIDs = append(restoredIDs, id)
+	}
+
+	if restoredIDs == nil {
+		return []string{}, 0, ErrNodeNotFound
+	}
+	return restoredIDs, int64(len(restoredIDs)), nil
 }
 
 func (q *Queries) GetNodeIfAccessible(ctx context.Context, nodeID string, userID int64) (*models.Node, error) {
@@ -1195,7 +1244,7 @@ func (q *Queries) GetLatestEventID(ctx context.Context, userID int64) (int64, er
 }
 
 const richNodeFields = `
-    n.id, n.parent_id, n.name, n.node_type, n.size_bytes, n.mime_type, n.created_at, n.modified_at,
+    n.id, n.parent_id, n.original_parent_id, n.name, n.node_type, n.size_bytes, n.mime_type, n.created_at, n.modified_at,
     n.owner_id, u.username, u.display_name,
     (CASE WHEN fav.user_id IS NOT NULL THEN TRUE ELSE FALSE END) as is_favorited,
     EXISTS (SELECT 1 FROM shares s WHERE s.node_id = n.id) as is_shared
@@ -1204,7 +1253,7 @@ const richNodeFields = `
 func scanRichNode(rows pgx.Rows) (*models.RichNode, error) {
 	var node models.RichNode
 	err := rows.Scan(
-		&node.ID, &node.ParentID, &node.Name, &node.NodeType, &node.SizeBytes, &node.MimeType, &node.CreatedAt, &node.ModifiedAt,
+		&node.ID, &node.ParentID, &node.OriginalParentID, &node.Name, &node.NodeType, &node.SizeBytes, &node.MimeType, &node.CreatedAt, &node.ModifiedAt,
 		&node.Owner.ID, &node.Owner.Username, &node.Owner.DisplayName,
 		&node.IsFavorited,
 		&node.IsShared,
@@ -1514,4 +1563,29 @@ func (q *Queries) PurgeSingleNode(ctx context.Context, ownerID int64, nodeID str
 	}
 
 	return totalNodesDeleted, deletedFileIDs, totalSizeFreed, nil
+}
+
+func (q *Queries) findAvailableName(ctx context.Context, ownerID int64, parentID *string, originalName string) (string, error) {
+	baseName := originalName
+	extension := ""
+	if dotIndex := strings.LastIndex(originalName, "."); dotIndex != -1 {
+		baseName = originalName[:dotIndex]
+		extension = originalName[dotIndex:]
+	}
+
+	for i := 1; i < 100; i++ {
+		newName := fmt.Sprintf("%s (%d)%s", baseName, i, extension)
+
+		var exists bool
+		query := `SELECT EXISTS(SELECT 1 FROM nodes WHERE owner_id = $1 AND parent_id IS NOT DISTINCT FROM $2 AND name = $3 AND deleted_at IS NULL)`
+		err := q.db.QueryRow(ctx, query, ownerID, parentID, newName).Scan(&exists)
+		if err != nil {
+			return "", err
+		}
+
+		if !exists {
+			return newName, nil
+		}
+	}
+	return "", fmt.Errorf("could not find an available name for %s after 99 attempts", originalName)
 }

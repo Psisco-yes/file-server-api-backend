@@ -231,35 +231,72 @@ func TestGetNodeByID(t *testing.T) {
 func TestRestoreNode(t *testing.T) {
 	owner := createTestUser(t, "user_restore_node")
 	parentFolder := createTestNode(t, CreateNodeParams{ID: "restore_parent", OwnerID: owner.ID, Name: "Parent", NodeType: "folder"})
-	nodeToTrash := createTestNode(t, CreateNodeParams{ID: "node_to_restore", OwnerID: owner.ID, ParentID: &parentFolder.ID, Name: "File to Restore", NodeType: "file"})
 
-	_, err := testStore.MoveNodeToTrash(context.Background(), nodeToTrash.ID, owner.ID)
-	require.NoError(t, err)
+	t.Run("restore single file", func(t *testing.T) {
+		nodeToTrash := createTestNode(t, CreateNodeParams{ID: "restore_single_node", OwnerID: owner.ID, ParentID: &parentFolder.ID, Name: "File to Restore", NodeType: "file"})
 
-	var deletedAt *time.Time
-	err = testStore.pool.QueryRow(context.Background(), `SELECT deleted_at FROM nodes WHERE id=$1`, nodeToTrash.ID).Scan(&deletedAt)
-	require.NoError(t, err)
-	require.NotNil(t, deletedAt)
+		_, err := testStore.MoveNodeToTrash(context.Background(), nodeToTrash.ID, owner.ID)
+		require.NoError(t, err)
 
-	success, err := testStore.RestoreNode(context.Background(), nodeToTrash.ID, owner.ID)
-	require.NoError(t, err)
-	require.True(t, success)
+		_, rowsAffected, err := testStore.RestoreNode(context.Background(), nodeToTrash.ID, owner.ID, false)
+		require.NoError(t, err)
+		require.Equal(t, int64(1), rowsAffected)
 
-	restoredNode, err := testStore.GetNodeByID(context.Background(), nodeToTrash.ID, owner.ID)
-	require.NoError(t, err)
-	require.NotNil(t, restoredNode)
-	require.NotNil(t, restoredNode.ParentID)
-	require.Equal(t, parentFolder.ID, *restoredNode.ParentID)
+		restoredNode, err := testStore.GetNodeByID(context.Background(), nodeToTrash.ID, owner.ID)
+		require.NoError(t, err)
+		require.NotNil(t, restoredNode)
+		require.NotNil(t, restoredNode.ParentID)
+		require.Equal(t, parentFolder.ID, *restoredNode.ParentID)
+	})
 
-	nodeToTrashAgain := createTestNode(t, CreateNodeParams{ID: "conflicting_node_newx", OwnerID: owner.ID, ParentID: &parentFolder.ID, Name: "Conflicting Name", NodeType: "file"})
-	_, err = testStore.MoveNodeToTrash(context.Background(), nodeToTrashAgain.ID, owner.ID)
-	require.NoError(t, err)
-	createTestNode(t, CreateNodeParams{ID: "conflicting_node_new", OwnerID: owner.ID, ParentID: &parentFolder.ID, Name: "Conflicting Name", NodeType: "file"})
+	t.Run("restore recursively", func(t *testing.T) {
+		folderToTrash := createTestNode(t, CreateNodeParams{ID: "restore_rec_folder", OwnerID: owner.ID, ParentID: &parentFolder.ID, Name: "Recursive Restore Folder", NodeType: "folder"})
+		fileInFolder := createTestNode(t, CreateNodeParams{ID: "restore_rec_file", OwnerID: owner.ID, ParentID: &folderToTrash.ID, Name: "Inner File", NodeType: "file"})
 
-	success, err = testStore.RestoreNode(context.Background(), nodeToTrashAgain.ID, owner.ID)
-	require.Error(t, err)
-	require.False(t, success)
-	require.ErrorIs(t, err, ErrDuplicateNodeName)
+		_, err := testStore.MoveNodeToTrash(context.Background(), folderToTrash.ID, owner.ID)
+		require.NoError(t, err)
+
+		_, rowsAffected, err := testStore.RestoreNode(context.Background(), folderToTrash.ID, owner.ID, false)
+		require.NoError(t, err)
+		require.Equal(t, int64(2), rowsAffected, "Should restore the folder and the file inside it")
+
+		var count int
+		err = testStore.pool.QueryRow(context.Background(), "SELECT COUNT(*) FROM nodes WHERE id IN ($1, $2) AND deleted_at IS NULL", folderToTrash.ID, fileInFolder.ID).Scan(&count)
+		require.NoError(t, err)
+		require.Equal(t, 2, count)
+	})
+
+	t.Run("fail to restore on name conflict without rename flag", func(t *testing.T) {
+		nodeToTrashAgain := createTestNode(t, CreateNodeParams{ID: "conflicting_node_newx", OwnerID: owner.ID, ParentID: &parentFolder.ID, Name: "Conflicting Name", NodeType: "file"})
+		_, err := testStore.MoveNodeToTrash(context.Background(), nodeToTrashAgain.ID, owner.ID)
+		require.NoError(t, err)
+
+		createTestNode(t, CreateNodeParams{ID: "conflicting_node_new", OwnerID: owner.ID, ParentID: &parentFolder.ID, Name: "Conflicting Name", NodeType: "file"})
+
+		_, rowsAffected, err := testStore.RestoreNode(context.Background(), nodeToTrashAgain.ID, owner.ID, false)
+		require.Error(t, err)
+		require.Equal(t, int64(0), rowsAffected)
+		require.ErrorIs(t, err, ErrDuplicateNodeName)
+	})
+
+	t.Run("succeed to restore on name conflict with rename flag", func(t *testing.T) {
+		nodeToTrash := createTestNode(t, CreateNodeParams{ID: "rename_conflict_trash", OwnerID: owner.ID, ParentID: &parentFolder.ID, Name: "Rename On Conflict", NodeType: "file"})
+		_, err := testStore.MoveNodeToTrash(context.Background(), nodeToTrash.ID, owner.ID)
+		require.NoError(t, err)
+
+		createTestNode(t, CreateNodeParams{ID: "rename_conflict_exist", OwnerID: owner.ID, ParentID: &parentFolder.ID, Name: "Rename On Conflict", NodeType: "file"})
+
+		restoredIDs, rowsAffected, err := testStore.RestoreNode(context.Background(), nodeToTrash.ID, owner.ID, true)
+		require.NoError(t, err)
+		require.Equal(t, int64(1), rowsAffected)
+		require.Len(t, restoredIDs, 1)
+
+		restoredNode, err := testStore.GetNodeByID(context.Background(), restoredIDs[0], owner.ID)
+		require.NoError(t, err)
+		require.NotNil(t, restoredNode)
+		require.Equal(t, "Rename On Conflict (1)", restoredNode.Name)
+		require.Equal(t, parentFolder.ID, *restoredNode.ParentID)
+	})
 }
 
 func TestGetNodeIfAccessible(t *testing.T) {

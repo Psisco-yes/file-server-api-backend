@@ -6,7 +6,8 @@ import (
 	"log"
 	"net/http"
 	"serwer-plikow/internal/database"
-	_ "serwer-plikow/internal/models"
+	"serwer-plikow/internal/models"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -83,11 +84,13 @@ func (s *Server) ListTrashHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary      Restore a node from trash
-// @Description  Restores a file or folder from the trash to its original location. Fails if a node with the same name already exists in the target location.
+// @Description  Restores a file or folder (and all of its contents) from the trash to its original location. Fails if a node with the same name already exists in the target location.
 // @Tags         nodes
+// @Produce      json
 // @Security     BearerAuth
 // @Param        nodeId   path      string  true  "Node ID to restore"
-// @Success      200      {null}    nil   "OK"
+// @Param        renameOnConflict query     boolean false "If true, renames the node (e.g., 'file (1).txt') on conflict instead of failing."
+// @Success      200      {object}  models.RichNode
 // @Failure      401      {string}  string "Unauthorized"
 // @Failure      404      {string}  string "Not Found"
 // @Failure      409      {string}  string "Conflict - a node with the same name already exists in the original location"
@@ -97,45 +100,73 @@ func (s *Server) RestoreNodeHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 	nodeID := chi.URLParam(r, "nodeId")
 
+	renameOnConflictStr := r.URL.Query().Get("renameOnConflict")
+	renameOnConflict := strings.ToLower(renameOnConflictStr) == "true"
+
+	var restoredIDs []string
+
 	txErr := s.store.ExecTx(r.Context(), func(q *database.Queries) error {
-		success, err := q.RestoreNode(r.Context(), nodeID, claims.UserID)
+		var err error
+		var rowsAffectedCount int64
+		restoredIDs, rowsAffectedCount, err = q.RestoreNode(r.Context(), nodeID, claims.UserID, renameOnConflict)
 		if err != nil {
 			return err
 		}
-		if !success {
+		if rowsAffectedCount == 0 {
 			return database.ErrNodeNotFound
 		}
 
-		payload := map[string]string{"id": nodeID}
-		return q.LogEvent(r.Context(), claims.UserID, "node_restored", payload)
+		payload := map[string]interface{}{"restored_node_ids": restoredIDs}
+		return q.LogEvent(r.Context(), claims.UserID, "nodes_restored", payload)
 	})
 
 	if txErr != nil {
-		if errors.Is(txErr, database.ErrNodeNotFound) {
-			http.Error(w, "Node not found in trash...", http.StatusNotFound)
-			return
+		switch {
+		case errors.Is(txErr, database.ErrNodeNotFound):
+			http.Error(w, "Node not found in trash", http.StatusNotFound)
+		case errors.Is(txErr, database.ErrDuplicateNodeName):
+			http.Error(w, "Cannot restore: a node with the same name already exists in the original location", http.StatusConflict)
+		default:
+			log.Printf("ERROR: Failed to restore node in transaction: %v", txErr)
+			http.Error(w, "Failed to restore node", http.StatusInternalServerError)
 		}
-		if errors.Is(txErr, database.ErrDuplicateNodeName) {
-			http.Error(w, "Cannot restore: a node with the same name already exists...", http.StatusConflict)
-			return
-		}
-		http.Error(w, "Failed to restore node", http.StatusInternalServerError)
 		return
 	}
 
-	restoredNode, err := s.store.GetRichNodeIfAccessible(r.Context(), nodeID, claims.UserID)
-	if err != nil || restoredNode == nil {
-		http.Error(w, "Failed to retrieve restored node", http.StatusInternalServerError)
+	var restoredRichNodes []*models.RichNode
+	for _, id := range restoredIDs {
+		node, err := s.store.GetRichNodeIfAccessible(r.Context(), id, claims.UserID)
+		if err == nil && node != nil {
+			restoredRichNodes = append(restoredRichNodes, node)
+		} else {
+			log.Printf("WARN: Could not retrieve restored rich node %s: %v", id, err)
+		}
+	}
+
+	if len(restoredRichNodes) == 0 {
+		http.Error(w, "Failed to retrieve details of restored nodes", http.StatusInternalServerError)
 		return
 	}
 
-	eventMsg := map[string]interface{}{"event_type": "node_restored", "payload": restoredNode}
+	var rootRestoredNode *models.RichNode
+	for _, rn := range restoredRichNodes {
+		if rn.ID == nodeID {
+			rootRestoredNode = rn
+			break
+		}
+	}
+	if rootRestoredNode == nil {
+		http.Error(w, "Failed to retrieve primary restored node", http.StatusInternalServerError)
+		return
+	}
+
+	eventMsg := map[string]interface{}{"event_type": "nodes_restored", "payload": restoredRichNodes}
 	eventBytes, _ := json.Marshal(eventMsg)
 	s.wsHub.PublishEvent(claims.UserID, eventBytes)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(restoredNode)
+	json.NewEncoder(w).Encode(rootRestoredNode)
 }
 
 // @Summary      Permanently delete a single item from trash

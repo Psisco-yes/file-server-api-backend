@@ -662,6 +662,90 @@ func TestTrashHandlers_Integration(t *testing.T) {
 		require.Len(t, trashItems, 1)
 		require.Equal(t, fileToKeep.ID, trashItems[0].ID)
 	})
+
+	t.Run("recursively restore folder from trash", func(t *testing.T) {
+		username := "user_recursive_restore"
+		testUser := createTestUserWithPassword(t, username, "password")
+		loginResp := loginUserForTest(t, username, "password")
+
+		folder, _ := createTestNodeAPI(t, "RestoreRecursive", "folder", nil, testUser.ID)
+		fileInFolder, _ := createTestNodeAPI(t, "FileInsideRestore", "file", &folder.ID, testUser.ID)
+
+		_, err := testServer.store.MoveNodeToTrash(context.Background(), folder.ID, testUser.ID)
+		require.NoError(t, err)
+
+		var count int
+		err = testServer.store.GetPool().QueryRow(context.Background(), "SELECT COUNT(*) FROM nodes WHERE id IN ($1, $2) AND deleted_at IS NOT NULL", folder.ID, fileInFolder.ID).Scan(&count)
+		require.NoError(t, err)
+		require.Equal(t, 2, count)
+
+		urlRestore := fmt.Sprintf("/api/v1/nodes/%s/restore", folder.ID)
+		reqRestore := httptest.NewRequest("POST", urlRestore, nil)
+		reqRestore.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rrRestore := httptest.NewRecorder()
+		router.ServeHTTP(rrRestore, reqRestore)
+		require.Equal(t, http.StatusOK, rrRestore.Code)
+
+		err = testServer.store.GetPool().QueryRow(context.Background(), "SELECT COUNT(*) FROM nodes WHERE id IN ($1, $2) AND deleted_at IS NOT NULL", folder.ID, fileInFolder.ID).Scan(&count)
+		require.NoError(t, err)
+		require.Equal(t, 0, count)
+
+		restoredFile, err := testServer.store.GetNodeIfAccessible(context.Background(), fileInFolder.ID, testUser.ID)
+		require.NoError(t, err)
+		require.NotNil(t, restoredFile.ParentID)
+		require.Equal(t, folder.ID, *restoredFile.ParentID)
+	})
+
+	t.Run("fail to restore on conflict without rename flag", func(t *testing.T) {
+		username := "user_restore_fail_conflict"
+		testUser := createTestUserWithPassword(t, username, "password")
+		loginResp := loginUserForTest(t, username, "password")
+
+		nodeInTrash, _ := createTestNodeAPI(t, "conflict_file.txt", "file", nil, testUser.ID)
+		testServer.store.MoveNodeToTrash(context.Background(), nodeInTrash.ID, testUser.ID)
+
+		createTestNodeAPI(t, "conflict_file.txt", "file", nil, testUser.ID)
+
+		urlRestore := fmt.Sprintf("/api/v1/nodes/%s/restore", nodeInTrash.ID)
+		reqRestore := httptest.NewRequest("POST", urlRestore, nil)
+		reqRestore.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rrRestore := httptest.NewRecorder()
+		router.ServeHTTP(rrRestore, reqRestore)
+
+		require.Equal(t, http.StatusConflict, rrRestore.Code)
+
+		var count int
+		err := testServer.store.GetPool().QueryRow(context.Background(), "SELECT COUNT(*) FROM nodes WHERE id = $1 AND deleted_at IS NOT NULL", nodeInTrash.ID).Scan(&count)
+		require.NoError(t, err)
+		require.Equal(t, 1, count, "Node should remain in the trash after a failed restore")
+	})
+
+	t.Run("restore with rename on conflict", func(t *testing.T) {
+		username := "user_restore_rename"
+		testUser := createTestUserWithPassword(t, username, "password")
+		loginResp := loginUserForTest(t, username, "password")
+
+		nodeInTrash, _ := createTestNodeAPI(t, "file_to_rename.txt", "file", nil, testUser.ID)
+		testServer.store.MoveNodeToTrash(context.Background(), nodeInTrash.ID, testUser.ID)
+
+		createTestNodeAPI(t, "file_to_rename.txt", "file", nil, testUser.ID)
+
+		urlRestore := fmt.Sprintf("/api/v1/nodes/%s/restore?renameOnConflict=true", nodeInTrash.ID)
+		reqRestore := httptest.NewRequest("POST", urlRestore, nil)
+		reqRestore.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rrRestore := httptest.NewRecorder()
+		router.ServeHTTP(rrRestore, reqRestore)
+
+		require.Equal(t, http.StatusOK, rrRestore.Code)
+
+		var restoredNode models.RichNode
+		err := json.Unmarshal(rrRestore.Body.Bytes(), &restoredNode)
+		require.NoError(t, err)
+
+		require.NotEqual(t, "file_to_rename.txt", restoredNode.Name, "Node name should have been changed")
+		require.Equal(t, "file_to_rename (1).txt", restoredNode.Name)
+		require.Nil(t, restoredNode.ParentID, "Node should be restored to root")
+	})
 }
 
 func TestGetEventsHandler_Integration(t *testing.T) {

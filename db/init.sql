@@ -36,8 +36,8 @@ CREATE TABLE nodes (
     original_parent_id VARCHAR(21)
 );
 
-CREATE UNIQUE INDEX unique_name_in_folder ON nodes (owner_id, parent_id, name) WHERE parent_id IS NOT NULL;
-CREATE UNIQUE INDEX unique_name_in_root ON nodes (owner_id, name) WHERE parent_id IS NULL;
+CREATE UNIQUE INDEX unique_name_in_folder ON nodes (owner_id, parent_id, name) WHERE parent_id IS NOT NULL AND deleted_at IS NULL;
+CREATE UNIQUE INDEX unique_name_in_root ON nodes (owner_id, name) WHERE parent_id IS NULL AND deleted_at IS NULL;
 
 CREATE INDEX idx_nodes_owner_id ON nodes(owner_id);
 CREATE INDEX idx_nodes_parent_id ON nodes(parent_id);

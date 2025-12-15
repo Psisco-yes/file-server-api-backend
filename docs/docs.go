@@ -753,6 +753,12 @@ const docTemplate = `{
                         "name": "nodeId",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "The ID of the root shared node, used to calculate relative paths for breadcrumbs.",
+                        "name": "share_context",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -1165,7 +1171,10 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Restores a file or folder from the trash to its original location. Fails if a node with the same name already exists in the target location.",
+                "description": "Restores a file or folder (and all of its contents) from the trash to its original location. Fails if a node with the same name already exists in the target location.",
+                "produces": [
+                    "application/json"
+                ],
                 "tags": [
                     "nodes"
                 ],
@@ -1177,13 +1186,19 @@ const docTemplate = `{
                         "name": "nodeId",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "If true, renames the node (e.g., 'file (1).txt') on conflict instead of failing.",
+                        "name": "renameOnConflict",
+                        "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "null"
+                            "$ref": "#/definitions/serwer-plikow_internal_models.RichNode"
                         }
                     },
                     "401": {
@@ -1851,6 +1866,55 @@ const docTemplate = `{
                 }
             }
         },
+        "/trash/{nodeId}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Permanently deletes a single file or folder (and all its contents) from the user's trash. This action cannot be undone.",
+                "tags": [
+                    "trash"
+                ],
+                "summary": "Permanently delete a single item from trash",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "The ID of the node to permanently delete from trash",
+                        "name": "nodeId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "type": "null"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found - Node not found in trash",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/ws": {
             "get": {
                 "description": "Upgrades an HTTP connection to a WebSocket connection for real-time updates. The access token must be provided as a query parameter.",
@@ -1997,6 +2061,9 @@ const docTemplate = `{
                 "node_type": {
                     "type": "string",
                     "example": "file"
+                },
+                "original_parent_id": {
+                    "type": "string"
                 },
                 "owner": {
                     "$ref": "#/definitions/serwer-plikow_internal_models.RichNodeOwner"
@@ -2193,6 +2260,9 @@ const docTemplate = `{
                 "node_type": {
                     "type": "string",
                     "example": "file"
+                },
+                "original_parent_id": {
+                    "type": "string"
                 },
                 "owner": {
                     "$ref": "#/definitions/serwer-plikow_internal_models.RichNodeOwner"

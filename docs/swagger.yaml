@@ -79,6 +79,8 @@ definitions:
       node_type:
         example: file
         type: string
+      original_parent_id:
+        type: string
       owner:
         $ref: '#/definitions/serwer-plikow_internal_models.RichNodeOwner'
       parent_id:
@@ -216,6 +218,8 @@ definitions:
         type: string
       node_type:
         example: file
+        type: string
+      original_parent_id:
         type: string
       owner:
         $ref: '#/definitions/serwer-plikow_internal_models.RichNodeOwner'
@@ -660,6 +664,11 @@ paths:
         name: nodeId
         required: true
         type: string
+      - description: The ID of the root shared node, used to calculate relative paths
+          for breadcrumbs.
+        in: query
+        name: share_context
+        type: string
       produces:
       - application/json
       responses:
@@ -903,19 +912,27 @@ paths:
       - favorites
   /nodes/{nodeId}/restore:
     post:
-      description: Restores a file or folder from the trash to its original location.
-        Fails if a node with the same name already exists in the target location.
+      description: Restores a file or folder (and all of its contents) from the trash
+        to its original location. Fails if a node with the same name already exists
+        in the target location.
       parameters:
       - description: Node ID to restore
         in: path
         name: nodeId
         required: true
         type: string
+      - description: If true, renames the node (e.g., 'file (1).txt') on conflict
+          instead of failing.
+        in: query
+        name: renameOnConflict
+        type: boolean
+      produces:
+      - application/json
       responses:
         "200":
           description: OK
           schema:
-            type: "null"
+            $ref: '#/definitions/serwer-plikow_internal_models.RichNode'
         "401":
           description: Unauthorized
           schema:
@@ -1485,6 +1502,38 @@ paths:
       security:
       - BearerAuth: []
       summary: List trash contents
+      tags:
+      - trash
+  /trash/{nodeId}:
+    delete:
+      description: Permanently deletes a single file or folder (and all its contents)
+        from the user's trash. This action cannot be undone.
+      parameters:
+      - description: The ID of the node to permanently delete from trash
+        in: path
+        name: nodeId
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+          schema:
+            type: "null"
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "404":
+          description: Not Found - Node not found in trash
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Permanently delete a single item from trash
       tags:
       - trash
   /trash/purge:
