@@ -1147,6 +1147,51 @@ func TestGetNodeHandler_Integration(t *testing.T) {
 
 		require.Equal(t, http.StatusNotFound, rr.Code)
 	})
+
+	t.Run("recipient gets details with relative path using share_context", func(t *testing.T) {
+		ownerCtx := createTestUserWithPassword(t, "owner_path_context", "password")
+		recipientCtx := createTestUserWithPassword(t, "recipient_path_context", "password")
+		recipientLoginCtx := loginUserForTest(t, recipientCtx.Username, "password")
+
+		privateRoot, _ := createTestNodeAPI(t, "Private Root", "folder", nil, ownerCtx.ID)
+		sharedFolder, _ := createTestNodeAPI(t, "Shared Folder", "folder", &privateRoot.ID, ownerCtx.ID)
+		innerFile, _ := createTestNodeAPI(t, "Inner File.txt", "file", &sharedFolder.ID, ownerCtx.ID)
+
+		_, err := testServer.store.ShareNode(context.Background(), database.ShareNodeParams{
+			NodeID: sharedFolder.ID, SharerID: ownerCtx.ID, RecipientID: recipientCtx.ID, Permissions: "read",
+		})
+		require.NoError(t, err)
+
+		url := fmt.Sprintf("/api/v1/nodes/%s?share_context=%s", innerFile.ID, sharedFolder.ID)
+		req := httptest.NewRequest("GET", url, nil)
+		req.Header.Set("Authorization", "Bearer "+recipientLoginCtx.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusOK, rr.Code)
+		var resp NodeDetailResponse
+		err = json.Unmarshal(rr.Body.Bytes(), &resp)
+		require.NoError(t, err)
+
+		require.Len(t, resp.Path, 0, "Path should be empty relative to the share context root")
+
+		innerFolder, _ := createTestNodeAPI(t, "Inner Folder", "folder", &sharedFolder.ID, ownerCtx.ID)
+		deepFile, _ := createTestNodeAPI(t, "Deep File.txt", "file", &innerFolder.ID, ownerCtx.ID)
+
+		urlDeep := fmt.Sprintf("/api/v1/nodes/%s?share_context=%s", deepFile.ID, sharedFolder.ID)
+		reqDeep := httptest.NewRequest("GET", urlDeep, nil)
+		reqDeep.Header.Set("Authorization", "Bearer "+recipientLoginCtx.AccessToken)
+		rrDeep := httptest.NewRecorder()
+		router.ServeHTTP(rrDeep, reqDeep)
+
+		require.Equal(t, http.StatusOK, rrDeep.Code)
+		var respDeep NodeDetailResponse
+		err = json.Unmarshal(rrDeep.Body.Bytes(), &respDeep)
+		require.NoError(t, err)
+
+		require.Len(t, respDeep.Path, 1, "Path should contain one element relative to share context")
+		require.Equal(t, "Inner Folder", respDeep.Path[0].Name, "Path should not show 'Private Root'")
+	})
 }
 
 func TestGetLatestEventHandler_Integration(t *testing.T) {
