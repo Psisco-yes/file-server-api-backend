@@ -172,53 +172,142 @@ func TestListNodesHandler(t *testing.T) {
 }
 
 func TestUpdateNodeHandler_Rename(t *testing.T) {
-	nodeToRename, err := createTestNodeAPI(t, "Stara Nazwa", "folder", nil, testUserClaims.UserID)
-	require.NoError(t, err)
+	t.Run("rename successfully", func(t *testing.T) {
+		user := createTestUserWithPassword(t, "user_rename_success", "password")
+		loginResp := loginUserForTest(t, "user_rename_success", "password")
+		nodeToRename, err := createTestNodeAPI(t, "Stara Nazwa", "folder", nil, user.ID)
+		require.NoError(t, err)
 
-	payload := UpdateNodeRequest{Name: new(string)}
-	*payload.Name = "Nowa Nazwa"
-	body, _ := json.Marshal(payload)
-	url := fmt.Sprintf("/api/v1/nodes/%s", nodeToRename.ID)
-	req := httptest.NewRequest("PATCH", url, bytes.NewReader(body))
-	req.Header.Set("Authorization", "Bearer "+testUserToken)
-	rr := httptest.NewRecorder()
+		payload := UpdateNodeRequest{Name: new(string)}
+		*payload.Name = "Nowa Nazwa"
+		body, _ := json.Marshal(payload)
+		url := fmt.Sprintf("/api/v1/nodes/%s", nodeToRename.ID)
+		req := httptest.NewRequest("PATCH", url, bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rr := httptest.NewRecorder()
 
-	router := chi.NewRouter()
-	router.With(testServer.AuthMiddleware).Patch("/api/v1/nodes/{nodeId}", testServer.UpdateNodeHandler)
-	router.ServeHTTP(rr, req)
+		router := chi.NewRouter()
+		router.With(testServer.AuthMiddleware).Patch("/api/v1/nodes/{nodeId}", testServer.UpdateNodeHandler)
+		router.ServeHTTP(rr, req)
 
-	require.Equal(t, http.StatusOK, rr.Code)
+		require.Equal(t, http.StatusOK, rr.Code)
+		updatedNode, err := testServer.store.GetNodeByID(context.Background(), nodeToRename.ID, user.ID)
+		require.NoError(t, err)
+		require.Equal(t, "Nowa Nazwa", updatedNode.Name)
+	})
 
-	updatedNode, err := testServer.store.GetNodeByID(context.Background(), nodeToRename.ID, testUserClaims.UserID)
-	require.NoError(t, err)
-	require.Equal(t, "Nowa Nazwa", updatedNode.Name)
+	t.Run("rename to a conflicting name", func(t *testing.T) {
+		user := createTestUserWithPassword(t, "user_rename_conflict", "password")
+		loginResp := loginUserForTest(t, "user_rename_conflict", "password")
+
+		nodeToRename, _ := createTestNodeAPI(t, "Original Name", "file", nil, user.ID)
+		createTestNodeAPI(t, "Existing Name", "file", nil, user.ID)
+
+		payload := UpdateNodeRequest{Name: new(string)}
+		*payload.Name = "Existing Name"
+		body, _ := json.Marshal(payload)
+		url := fmt.Sprintf("/api/v1/nodes/%s", nodeToRename.ID)
+		req := httptest.NewRequest("PATCH", url, bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rr := httptest.NewRecorder()
+
+		router := chi.NewRouter()
+		router.Use(testServer.AuthMiddleware)
+		router.Patch("/api/v1/nodes/{nodeId}", testServer.UpdateNodeHandler)
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusConflict, rr.Code)
+
+		nodeAfter, err := testServer.store.GetNodeByID(context.Background(), nodeToRename.ID, user.ID)
+		require.NoError(t, err)
+		require.Equal(t, "Original Name", nodeAfter.Name)
+	})
 }
 
 func TestUpdateNodeHandler_Move(t *testing.T) {
-	folder1, err := createTestNodeAPI(t, "Folder 1", "folder", nil, testUserClaims.UserID)
-	require.NoError(t, err)
-	folder2, err := createTestNodeAPI(t, "Folder 2", "folder", nil, testUserClaims.UserID)
-	require.NoError(t, err)
-	nodeToMove, err := createTestNodeAPI(t, "Plik do przeniesienia", "file", &folder1.ID, testUserClaims.UserID)
-	require.NoError(t, err)
-
-	payload := UpdateNodeRequest{ParentID: &folder2.ID}
-	body, _ := json.Marshal(payload)
-	url := fmt.Sprintf("/api/v1/nodes/%s", nodeToMove.ID)
-	req := httptest.NewRequest("PATCH", url, bytes.NewReader(body))
-	req.Header.Set("Authorization", "Bearer "+testUserToken)
-	rr := httptest.NewRecorder()
-
 	router := chi.NewRouter()
-	router.With(testServer.AuthMiddleware).Patch("/api/v1/nodes/{nodeId}", testServer.UpdateNodeHandler)
-	router.ServeHTTP(rr, req)
+	router.Use(testServer.AuthMiddleware)
+	router.Patch("/api/v1/nodes/{nodeId}", testServer.UpdateNodeHandler)
 
-	require.Equal(t, http.StatusOK, rr.Code)
+	t.Run("move file between folders successfully", func(t *testing.T) {
+		user := createTestUserWithPassword(t, "user_move_success", "password")
+		loginResp := loginUserForTest(t, "user_move_success", "password")
 
-	updatedNode, err := testServer.store.GetNodeByID(context.Background(), nodeToMove.ID, testUserClaims.UserID)
-	require.NoError(t, err)
-	require.NotNil(t, updatedNode.ParentID)
-	require.Equal(t, folder2.ID, *updatedNode.ParentID)
+		folder1, _ := createTestNodeAPI(t, "Folder 1", "folder", nil, user.ID)
+		folder2, _ := createTestNodeAPI(t, "Folder 2", "folder", nil, user.ID)
+		nodeToMove, _ := createTestNodeAPI(t, "Plik do przeniesienia", "file", &folder1.ID, user.ID)
+
+		payload := UpdateNodeRequest{ParentID: &folder2.ID}
+		body, _ := json.Marshal(payload)
+		url := fmt.Sprintf("/api/v1/nodes/%s", nodeToMove.ID)
+		req := httptest.NewRequest("PATCH", url, bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusOK, rr.Code)
+		updatedNode, err := testServer.store.GetNodeByID(context.Background(), nodeToMove.ID, user.ID)
+		require.NoError(t, err)
+		require.NotNil(t, updatedNode.ParentID)
+		require.Equal(t, folder2.ID, *updatedNode.ParentID)
+	})
+
+	t.Run("fail to move folder into its own child (circular move)", func(t *testing.T) {
+		user := createTestUserWithPassword(t, "user_move_circular", "password")
+		loginResp := loginUserForTest(t, "user_move_circular", "password")
+
+		parent, _ := createTestNodeAPI(t, "Parent", "folder", nil, user.ID)
+		child, _ := createTestNodeAPI(t, "Child", "folder", &parent.ID, user.ID)
+
+		payload := UpdateNodeRequest{ParentID: &child.ID}
+		body, _ := json.Marshal(payload)
+		url := fmt.Sprintf("/api/v1/nodes/%s", parent.ID)
+		req := httptest.NewRequest("PATCH", url, bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusBadRequest, rr.Code)
+		require.Contains(t, rr.Body.String(), "Cannot move a folder into one of its subfolders")
+	})
+
+	t.Run("fail to move folder into itself", func(t *testing.T) {
+		user := createTestUserWithPassword(t, "user_move_self", "password")
+		loginResp := loginUserForTest(t, "user_move_self", "password")
+
+		folder, _ := createTestNodeAPI(t, "SomeFolder", "folder", nil, user.ID)
+
+		payload := UpdateNodeRequest{ParentID: &folder.ID}
+		body, _ := json.Marshal(payload)
+		url := fmt.Sprintf("/api/v1/nodes/%s", folder.ID)
+		req := httptest.NewRequest("PATCH", url, bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusBadRequest, rr.Code)
+		require.Contains(t, rr.Body.String(), "Cannot move a folder into itself")
+	})
+
+	t.Run("fail to move node between different owners", func(t *testing.T) {
+		userA := createTestUserWithPassword(t, "user_move_owner_a", "password")
+		userB := createTestUserWithPassword(t, "user_move_owner_b", "password")
+		loginA := loginUserForTest(t, "user_move_owner_a", "password")
+
+		nodeToMove, _ := createTestNodeAPI(t, "FileOfA", "file", nil, userA.ID)
+		targetFolderB, _ := createTestNodeAPI(t, "FolderOfB", "folder", nil, userB.ID)
+
+		payload := UpdateNodeRequest{ParentID: &targetFolderB.ID}
+		body, _ := json.Marshal(payload)
+		url := fmt.Sprintf("/api/v1/nodes/%s", nodeToMove.ID)
+		req := httptest.NewRequest("PATCH", url, bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+loginA.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusBadRequest, rr.Code)
+		require.Contains(t, rr.Body.String(), "Moving files between different owners is not allowed")
+	})
 }
 
 func TestDeleteNodeHandler(t *testing.T) {
@@ -560,6 +649,39 @@ func TestShareAndFavorite_Integration(t *testing.T) {
 		router.ServeHTTP(rr, req)
 		require.Equal(t, http.StatusNotFound, rr.Code)
 	})
+
+	t.Run("recipient cannot re-share a read-only node", func(t *testing.T) {
+		stranger := createTestUserWithPassword(t, "stranger_user_share", "password")
+
+		shareReq := ShareRequest{RecipientUsername: stranger.Username, Permissions: "read"}
+		body, _ := json.Marshal(shareReq)
+		url := fmt.Sprintf("/api/v1/nodes/%s/share", nodeToShare.ID)
+		req := httptest.NewRequest("POST", url, bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+recipientLogin.AccessToken)
+		rr := httptest.NewRecorder()
+
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusNotFound, rr.Code)
+	})
+
+	t.Run("recipient cannot upload to read-only shared folder", func(t *testing.T) {
+		readonlyFolder, _ := createTestNodeAPI(t, "Read Only Folder", "folder", nil, sharer.ID)
+		_, err := testServer.store.ShareNode(context.Background(), database.ShareNodeParams{
+			NodeID: readonlyFolder.ID, SharerID: sharer.ID, RecipientID: recipient.ID, Permissions: "read",
+		})
+		require.NoError(t, err)
+
+		payload := CreateFolderRequest{Name: "Illegal Subfolder", ParentID: &readonlyFolder.ID}
+		body, _ := json.Marshal(payload)
+		req := httptest.NewRequest("POST", "/api/v1/nodes/folder", bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+recipientLogin.AccessToken)
+		rr := httptest.NewRecorder()
+
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusForbidden, rr.Code)
+	})
 }
 
 func TestTrashHandlers_Integration(t *testing.T) {
@@ -570,6 +692,7 @@ func TestTrashHandlers_Integration(t *testing.T) {
 	router.Post("/api/v1/nodes/{nodeId}/restore", testServer.RestoreNodeHandler)
 	router.Delete("/api/v1/trash/purge", testServer.PurgeTrashHandler)
 	router.Delete("/api/v1/trash/{nodeId}", testServer.PurgeSingleNodeHandler)
+	router.Post("/api/v1/nodes/file", testServer.UploadFileHandler)
 
 	t.Run("full trash lifecycle", func(t *testing.T) {
 		username := "user_trash_lifecycle"
@@ -745,6 +868,43 @@ func TestTrashHandlers_Integration(t *testing.T) {
 		require.NotEqual(t, "file_to_rename.txt", restoredNode.Name, "Node name should have been changed")
 		require.Equal(t, "file_to_rename (1).txt", restoredNode.Name)
 		require.Nil(t, restoredNode.ParentID, "Node should be restored to root")
+	})
+
+	t.Run("verify physical file deletion on purge", func(t *testing.T) {
+		username := "user_physical_del"
+		testUser := createTestUserWithPassword(t, username, "password")
+		login := loginUserForTest(t, username, "password")
+
+		body := new(bytes.Buffer)
+		writer := multipart.NewWriter(body)
+		part, _ := writer.CreateFormFile("file", "to_be_deleted.txt")
+		part.Write([]byte("some data"))
+		writer.Close()
+
+		reqUp := httptest.NewRequest("POST", "/api/v1/nodes/file", body)
+		reqUp.Header.Set("Content-Type", writer.FormDataContentType())
+		reqUp.Header.Set("Authorization", "Bearer "+login.AccessToken)
+		rrUp := httptest.NewRecorder()
+		router.ServeHTTP(rrUp, reqUp)
+		require.Equal(t, http.StatusCreated, rrUp.Code)
+
+		var uploadedNodes []*models.RichNode
+		json.Unmarshal(rrUp.Body.Bytes(), &uploadedNodes)
+		nodeID := uploadedNodes[0].ID
+
+		_, err := testServer.store.MoveNodeToTrash(context.Background(), nodeID, testUser.ID)
+		require.NoError(t, err)
+
+		urlPurge := fmt.Sprintf("/api/v1/trash/%s", nodeID)
+		reqPurge := httptest.NewRequest("DELETE", urlPurge, nil)
+		reqPurge.Header.Set("Authorization", "Bearer "+login.AccessToken)
+		rrPurge := httptest.NewRecorder()
+		router.ServeHTTP(rrPurge, reqPurge)
+		require.Equal(t, http.StatusNoContent, rrPurge.Code)
+
+		_, err = testServer.storage.Get(nodeID)
+		require.Error(t, err, "File should no longer exist in local storage")
+		require.Contains(t, err.Error(), "not found")
 	})
 }
 
@@ -1050,6 +1210,37 @@ func TestCopyNodeHandler_Integration(t *testing.T) {
 		contentBytes, err := io.ReadAll(copiedFileContent)
 		require.NoError(t, err)
 		require.Equal(t, sourceContent, string(contentBytes))
+	})
+
+	t.Run("copy fails when destination quota is exceeded", func(t *testing.T) {
+		userA := createTestUserWithPassword(t, "user_copy_quota_a", "password")
+		userB := createTestUserWithPassword(t, "user_copy_quota_b", "password")
+		loginA := loginUserForTest(t, "user_copy_quota_a", "password")
+
+		var smallQuota int64 = 100
+		_, err := testServer.store.GetPool().Exec(context.Background(), "UPDATE users SET storage_quota_bytes = $1 WHERE id = $2", smallQuota, userB.ID)
+		require.NoError(t, err)
+
+		var fileSize int64 = 200
+		sourceFile, _ := createTestNodeAPI(t, "large_file.txt", "file", nil, userA.ID)
+		testServer.store.GetPool().Exec(context.Background(), "UPDATE nodes SET size_bytes=$1 WHERE id=$2", fileSize, sourceFile.ID)
+
+		targetFolder, _ := createTestNodeAPI(t, "target_for_large_file", "folder", nil, userB.ID)
+
+		_, err = testServer.store.ShareNode(context.Background(), database.ShareNodeParams{
+			NodeID: targetFolder.ID, SharerID: userB.ID, RecipientID: userA.ID, Permissions: "write",
+		})
+		require.NoError(t, err)
+
+		copyReq := CopyNodeRequest{ParentID: targetFolder.ID}
+		body, _ := json.Marshal(copyReq)
+		url := fmt.Sprintf("/api/v1/nodes/%s/copy", sourceFile.ID)
+		req := httptest.NewRequest("POST", url, bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+loginA.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusRequestEntityTooLarge, rr.Code)
 	})
 }
 
