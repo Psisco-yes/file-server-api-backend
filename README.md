@@ -2,30 +2,38 @@
 
 ## Opis Projektu
 
-W pełni funkcjonalny, REST-owy serwer plików zbudowany w Go, inspirowany systemami takimi jak Google Drive. Zapewnia bezpieczne zarządzanie plikami, udostępnianie oraz aktualizacje w czasie rzeczywistym.
+W pełni funkcjonalny, REST-owy serwer plików zbudowany w Go, inspirowany systemami takimi jak Google Drive. Zapewnia bezpieczne zarządzanie plikami, udostępnianie oraz aktualizacje w czasie rzeczywistym, zoptymalizowane pod kątem wydajności i łatwej integracji z aplikacjami klienckimi.
 
 ## Kluczowe Funkcjonalności
 
-- **Zarządzanie Plikami i Folderami:** Rozbudowane operacje na plikach i folderach (tworzenie, kopiowanie, listowanie, zmiana nazwy, przenoszenie).
-- **Bezpieczeństwo:** Autentykacja oparta na JWT z rotacją refresh tokenów, zarządzanie sesjami, obsługa HTTPS.
-- **Udostępnianie:** Możliwość udostępniania plików i folderów innym użytkownikom z dziedziczeniem uprawnień (`read`/`write`).
-- **Funkcje UX:** Kosz z opcją przywracania, ulubione, wyszukiwarka, pobieranie wielu plików/folderów jako archiwum ZIP.
-- **System Czasu Rzeczywistego:**
-  - **Dziennik Zdarzeń:** Umożliwia wydajną synchronizację dla klientów działających w trybie offline.
-  - **WebSockets:** Natychmiastowe, ukierunkowane powiadomienia o wszystkich zmianach w systemie.
-- **Zarządzanie Zasobami:** Limity miejsca (quotas) na użytkownika.
-- **Monitoring:** Endpointy `/health` i `/metrics` (Prometheus).
-- **Dokumentacja API:** Automatycznie generowana i interaktywna dokumentacja Swagger UI.
-- **Pełne Testy:** Pokrycie kodu testami integracyjnymi (API i baza danych) oraz zestaw testów E2E w Postman.
+-   **Zaawansowane Zarządzanie Plikami:** Pełen zestaw operacji CRUD na plikach i folderach (tworzenie, kopiowanie, listowanie, zmiana nazwy, przenoszenie).
+-   **Obsługa Dużych Plików:** Wsparcie dla przesyłania bardzo dużych plików dzięki mechanizmowi "chunked uploads", z możliwością wznawiania.
+-   **Bezpieczeństwo:**
+    *   **Uwierzytelnianie JWT:** Zabezpieczenie oparte na tokenach z rotacją i krótkim czasem życia `access token`.
+    *   **Zarządzanie Sesjami:** Możliwość przeglądania i unieważniania aktywnych sesji na różnych urządzeniach.
+    *   **HTTPS:** Domyślna obsługa szyfrowanego połączenia dzięki integracji z Caddy.
+-   **Elastyczne Udostępnianie:** Możliwość udostępniania plików i folderów innym użytkownikom z dwoma poziomami uprawnień (`read`/`write`) i dziedziczeniem uprawnień w zagnieżdżonych strukturach.
+-   **Użyteczne Funkcje:**
+    *   **Kosz:** Funkcjonalność "miękkiego usuwania" z opcją rekurencyjnego przywracania całej struktury folderów.
+    *   **Ulubione:** Oznaczanie ważnych plików i folderów dla szybkiego dostępu.
+    *   **Wyszukiwarka:** Globalne wyszukiwanie po nazwie we własnych i udostępnionych zasobach.
+    *   **Archiwizator ZIP:** Pobieranie wielu plików i folderów jako pojedynczego archiwum `.zip`.
+-   **System Czasu Rzeczywistego:**
+    *   **Dziennik Zdarzeń:** Umożliwia wydajną synchronizację "catch-up" dla klientów, którzy byli offline.
+    *   **WebSockets:** Natychmiastowe, ukierunkowane powiadomienia o wszystkich zmianach w systemie, wysyłane tylko do odpowiednich użytkowników.
+-   **Zarządzanie Zasobami:** Limity miejsca (quotas) na użytkownika.
+-   **Monitoring i Diagnostyka:** Endpointy `/health` i `/metrics` (w formacie Prometheus).
+-   **Dokumentacja API:** Automatycznie generowana i interaktywna dokumentacja Swagger UI.
+-   **Pełne Pokrycie Testami:** Wysokie pokrycie kodu testami integracyjnymi (API i baza danych) oraz jednostkowymi.
 
 ## Stack Technologiczny
 
-- **Backend:** Go (Golang)
-- **Baza Danych:** PostgreSQL
-- **Reverse Proxy (HTTPS):** Caddy
-- **Konteneryzacja:** Docker & Docker Compose
-- **Testowanie:** `testcontainers-go`, `testify`
-- **Dokumentacja:** `swaggo`
+-   **Backend:** Go (Golang)
+-   **Baza Danych:** PostgreSQL
+-   **Reverse Proxy (HTTPS):** Caddy
+-   **Konteneryzacja:** Docker & Docker Compose
+-   **Testowanie:** `testcontainers-go`, `testify`
+-   **Dokumentacja:** `swaggo`
 
 ## Uruchomienie Serwera (Krok po Kroku)
 
@@ -82,33 +90,41 @@ Po pierwszym uruchomieniu, w systemie dostępne są domyślne konta do testowani
 
 Aby zapewnić wydajne i responsywne działanie, aplikacja kliencka powinna stosować się do poniższych zasad.
 
-### Architektura: Lokalny Cache i WebSockets
+### Architektura: "Inteligentny Klient" z Odświeżaniem Danych
 
-Aplikacja kliencka **musi** działać w oparciu o **lokalny cache** struktury plików, który jest synchronizowany w czasie rzeczywistym.
+Zamiast budować i ręcznie synchronizować skomplikowany, pełny stan systemu plików po stronie klienta, zaleca się podejście "Inteligentnego Klienta" (Smart Client). Opiera się ono na cachowaniu poszczególnych zapytań API i inteligentnym ich odświeżaniu w odpowiedzi na zdarzenia z serwera.
 
-1.  **Start Aplikacji (Pierwsza Synchronizacja):**
-    *   Pobierz całą strukturę plików i folderów użytkownika, rekurencyjnie wywołując `GET /api/v1/nodes` dla własnych zasobów oraz `GET /api/v1/shares/incoming/...` dla udostępnionych.
-    *   Zbuduj w pamięci (lub lokalnej bazie) pełną kopię (cache) drzewa plików.
-    *   Wywołaj `GET /api/v1/events/latest`, aby pobrać ID ostatniego zdarzenia. Zapisz tę wartość jako `last_known_event_id`.
-    *   Nawiąż połączenie **WebSocket** (`wss://.../api/v1/ws?token=<token>`).
+1.  **Start Aplikacji:**
+    *   Pobierz podstawowe dane, np. `GET /api/v1/me`, aby uzyskać informacje o zalogowanym użytkowniku.
+    *   Nawiąż połączenie **WebSocket** (`wss://.../api/v1/ws?token=<token>`), aby nasłuchiwać na zmiany w czasie rzeczywistym.
 
 2.  **Działanie Aplikacji:**
-    *   Wszystkie operacje w UI (wyświetlanie folderów, etc.) wykonuj na **lokalnym cache'u**.
-    *   Gdy serwer prześle wiadomość przez WebSocket, zaktualizuj swój lokalny cache na podstawie `event_type` i `payload`.
-    *   Gdy użytkownik wykonuje akcję (np. tworzy folder), wyślij odpowiedni request do API. **Nie modyfikuj cache'u od razu.** Poczekaj na wiadomość zwrotną z WebSocket, która będzie ostatecznym potwierdzeniem, że operacja na serwerze się powiodła.
+    *   Każdy widok (np. zawartość folderu) pobiera swoje dane bezpośrednio z odpowiedniego endpointu (np. `GET /api/v1/nodes?parent_id=...`). Odpowiedź z tego zapytania jest cachowana po stronie klienta (np. w pamięci).
+    *   Gdy użytkownik wykonuje akcję (np. tworzy folder), aplikacja wysyła request do API (`POST /nodes/folder`), ale **nie modyfikuje swojego stanu od razu**. Jest to podejście optymistyczne, gdzie UI może tymczasowo pokazać zmianę, ale ostateczne potwierdzenie nadejdzie z serwera.
+    *   Gdy serwer prześle wiadomość przez WebSocket (np. `node_created` lub `node_updated`), klient identyfikuje, którego widoku dotyczyła zmiana (np. na podstawie `parent_id` w payloadzie zdarzenia). Następnie **unieważnia cache** dla tego konkretnego widoku i żąda odświeżenia danych, ponownie wywołując odpowiedni endpoint (np. `GET /api/v1/nodes?parent_id=...`).
+    *   Takie podejście drastycznie upraszcza logikę klienta i utrzymuje backend jako jedyne i ostateczne "źródło prawdy" (Source of Truth).
 
 3.  **Synchronizacja po Powrocie Online:**
-    *   Nawiąż połączenie WebSocket.
-    *   Wywołuj w pętli `GET /api/v1/events?since=<last_known_event_id>`, pobierając zdarzenia w paczkach, aż serwer zwróci pustą listę. Zaktualizuj `last_known_event_id` po każdej paczce.
+    *   Po odzyskaniu połączenia z internetem, klient powinien odświeżyć wszystkie aktywne, widoczne dla użytkownika dane.
+    *   Dodatkowo, aby zsynchronizować zmiany, które nastąpiły w tle (np. w folderach, których użytkownik aktualnie nie przegląda), można użyć endpointu `GET /api/v1/events?since=<last_known_event_id>`. Przetwarzając zwrócone zdarzenia, klient może selektywnie unieważnić i odświeżyć te części swojego cache'u, które stały się nieaktualne.
 
 ### Zarządzanie Tokenami
 
--   **Access Token (15 minut):** Używaj go do wszystkich zapytań API. Odświeżaj go **proaktywnie** (np. co 10-14 minut), nie czekając na błąd `401`.
--   **Refresh Token (24 godziny):** Służy tylko do odświeżania. Po każdym użyciu endpointu `/auth/refresh` otrzymasz **nowy** refresh token – stary staje się nieważny. Musisz zapisać ten nowy.
--   **Wylogowanie:** Po wywołaniu `DELETE /sessions/...` lub `POST /sessions/terminate_all`, klient **musi** usunąć oba tokeny ze swojej pamięci.
+-   **Access Token (15 minut):** Używaj go do wszystkich zapytań API. Zaleca się jego proaktywne odświeżanie (np. co 10-14 minut), nie czekając na błąd `401 Unauthorized`.
+-   **Refresh Token (24 godziny):** Służy wyłącznie do uzyskiwania nowego `access token` za pomocą endpointu `/auth/refresh`. Po każdym użyciu, serwer zwraca **nowy** `refresh token`, który należy zapisać, ponieważ stary zostaje unieważniony.
+-   **Wylogowanie:** Po wywołaniu `DELETE /sessions/...` lub `POST /sessions/terminate_all`, klient **musi** usunąć oba tokeny ze swojej pamięci, aby zakończyć sesję.
+
+### Przesyłanie Plików (Chunked Upload)
+
+Aby wgrać duży plik, użyj następującego przepływu:
+
+1.  **Inicjacja:** Wyślij `POST /api/v1/nodes/upload/initiate` z metadanymi pliku (`name`, `size`, `parent_id`). W odpowiedzi otrzymasz `upload_id`.
+2.  **Przesyłanie:** Podziel plik na części ("chunki", np. po 5 MB). Wysyłaj każdą część za pomocą `PATCH /api/v1/nodes/upload/{uploadId}`, dodając nagłówek `Content-Range` (np. `bytes 0-5242879/20000000`).
+3.  **Finalizacja:** Po wgraniu ostatniej części, wyślij `POST /api/v1/nodes/upload/{uploadId}/complete`, aby zakończyć proces. W odpowiedzi otrzymasz pełny obiekt `RichNode` nowo utworzonego pliku.
+
+Dla małych plików (np. < 100MB), nadal można używać prostszego endpointu `POST /api/v1/nodes/file`.
 
 ---
-
 
 ## Zarządzanie Administracyjne (Skrypty PowerShell)
 
@@ -123,7 +139,7 @@ Zarządzanie użytkownikami i systemem odbywa się za pomocą gotowych skryptów
 ### 1. Dodawanie Nowego Użytkownika
 
 ```powershell
-.\scripts\add-user.ps1 -Username "nowyuser" -Password "SuperT@jneHaslo1" -DisplayName "Nowy Użytkownik"
+.\add-user.ps1 -Username "nowyuser" -Password "SuperT@jneHaslo1" -DisplayName "Nowy Użytkownik"
 ```
 
 ### 2. Trwałe Usuwanie Użytkownika
@@ -131,7 +147,7 @@ Zarządzanie użytkownikami i systemem odbywa się za pomocą gotowych skryptów
 **UWAGA: Ta operacja jest nieodwracalna!** Usuwa użytkownika, wszystkie jego pliki, udostępnienia i sesje.
 
 ```powershell
-.\scripts\delete-user.ps1 -Username "nowyuser"
+.\delete-user.ps1 -Username "nowyuser"
 ```
 
 ### 3. Zmiana Limitu Miejsca
@@ -139,19 +155,19 @@ Zarządzanie użytkownikami i systemem odbywa się za pomocą gotowych skryptów
 Ustawia limit miejsca dla użytkownika w Gigabajtach (GB).
 
 ```powershell
-.\scripts\change-quota.ps1 -Username "nowyuser" -QuotaGB 25
+.\change-quota.ps1 -Username "nowyuser" -QuotaGB 25
 ```
 
 ### 4. Resetowanie Hasła Użytkownika
 
 ```powershell
-.\scripts\reset-password.ps1 -Username "nowyuser" -NewPassword "NoweLepszeHaslo_456"
+.\reset-password.ps1 -Username "nowyuser" -NewPassword "NoweLepszeHaslo_456"
 ```
 
 ### 5. Listowanie Wszystkich Użytkowników
 
 ```powershell
-.\scripts\list-users.ps1
+.\list-users.ps1
 ```
 
 ### 6. Wymuszone Wylogowanie Użytkownika
@@ -159,7 +175,7 @@ Ustawia limit miejsca dla użytkownika w Gigabajtach (GB).
 Natychmiast kończy wszystkie aktywne sesje dla danego użytkownika.
 
 ```powershell
-.\scripts\terminate-sessions.ps1 -Username "nowyuser"
+.\terminate-sessions.ps1 -Username "nowyuser"
 ```
 
 ### 7. Statystyki Systemu
@@ -167,7 +183,7 @@ Natychmiast kończy wszystkie aktywne sesje dla danego użytkownika.
 Wyświetla ogólne statystyki serwera.
 
 ```powershell
-.\scripts\system-stats.ps1
+.\system-stats.ps1
 ```
 
 ---
@@ -184,30 +200,32 @@ Wszystkie ścieżki są poprzedzone `/api/v1`. Wszystkie chronione endpointy wym
 - `DELETE /sessions/{sessionId}`: Wyloguj konkretną sesję.
 
 ### Zarządzanie Profilem Użytkownika
-- `GET /me`: Pobierz aktualne informacje o sobie.
+- `GET /me`: Pobierz pełne informacje o sobie (w tym użycie storage).
 - `PATCH /me`: Zaktualizuj profil (np. `display_name`).
-- `GET /me/storage`: Sprawdź wykorzystanie miejsca.
 - `PATCH /me/password`: Zmień hasło.
 
 ### Pliki i Foldery
-- `GET /nodes`: Listuj własne pliki/foldery (z paginacją).
+- `GET /nodes`: Listuj własne pliki/foldery (z paginacją i sortowaniem).
 - `POST /nodes/folder`: Stwórz folder.
-- `POST /nodes/file`: Wgraj plik(i).
+- `POST /nodes/file`: Wgraj mały plik(i) (simple upload).
 - `GET /nodes/archive`: Pobierz archiwum ZIP.
-- `GET /nodes/{nodeId}`: Pobierz metadane obiektu.
-- `GET /nodes/{nodeId}/path`: Pobierz ścieżkę "breadcrumbs".
+- `GET /nodes/{nodeId}`: Pobierz szczegółowe metadane obiektu (w tym ścieżkę i udostępnienia).
 - `GET /nodes/{nodeId}/download`: Pobierz plik.
 - `PATCH /nodes/{nodeId}`: Zmień nazwę lub przenieś.
 - `DELETE /nodes/{nodeId}`: Przenieś do kosza.
-- `POST /nodes/{nodeId}/restore`: Przywróć z kosza.
+- `POST /nodes/{nodeId}/restore`: Przywróć z kosza (rekurencyjnie).
 - `POST /nodes/{nodeId}/copy`: Stwórz głęboką kopię.
+
+### Przesyłanie Dużych Plików (Chunked Upload)
+- `POST /nodes/upload/initiate`: Rozpocznij sesję przesyłania.
+- `PATCH /nodes/upload/{uploadId}`: Wgraj część pliku.
+- `POST /nodes/upload/{uploadId}/complete`: Zakończ przesyłanie.
 
 ### Udostępnianie
 - `POST /nodes/{nodeId}/share`: Udostępnij plik/folder.
-- `GET /nodes/{nodeId}/shares`: Listuj udostępnienia dla danego obiektu.
 - `GET /shares/incoming/users`: Listuj, kto mi udostępnił.
 - `GET /shares/incoming/nodes`: Przeglądaj, co mi udostępniono.
-- `GET /shares/outgoing`: Listuj, co ja udostępniłem.
+- `GET /shares/outgoing/nodes`: Listuj unikalne pliki/foldery, które ja udostępniłem.
 - `DELETE /shares/{shareId}`: Cofnij udostępnienie.
 
 ### Funkcje Dodatkowe
@@ -216,7 +234,8 @@ Wszystkie ścieżki są poprzedzone `/api/v1`. Wszystkie chronione endpointy wym
 - `POST /nodes/{nodeId}/favorite`: Dodaj do ulubionych.
 - `DELETE /nodes/{nodeId}/favorite`: Usuń z ulubionych.
 - `GET /trash`: Listuj zawartość kosza.
-- `DELETE /trash/purge`: Opróżnij kosz.
+- `DELETE /trash/purge`: Opróżnij cały kosz.
+- `DELETE /trash/{nodeId}`: Trwale usuń pojedynczy element z kosza.
 
 ### Systemowe
 - `GET /events`: Pobierz nowe zdarzenia do synchronizacji.
@@ -234,11 +253,11 @@ Serwer wykorzystuje WebSockets do natychmiastowego powiadamiania podłączonych 
 - **Endpoint:** `GET /api/v1/ws` (protokół `wss://` dla HTTPS)
 - **URL Połączenia:** `wss://localhost/api/v1/ws?token=<access_token>`
 
-Uwierzytelnienie odbywa się poprzez przekazanie ważnego tokena dostępowego (JWT) jako parametru zapytania o nazwie `token`. Jeśli token jest nieprawidłowy, wygasł lub sesja została unieważniona, połączenie zostanie odrzucone lub zamknięte.
+Uwierzytelnienie odbywa się poprzez przekazanie ważnego tokena dostępowego (JWT) jako parametru zapytania.
 
 ### Format Komunikatów
 
-Po nawiązaniu połączenia, komunikacja jest jednostronna – serwer wysyła komunikaty do klienta. Klient nie musi wysyłać żadnych wiadomości, jego jedynym zadaniem jest nasłuchiwanie. Wszystkie komunikaty są wysyłane w formacie JSON i mają następującą strukturę:
+Komunikaty są wysyłane w formacie JSON i mają następującą strukturę:
 
 ```json
 {
@@ -249,18 +268,14 @@ Po nawiązaniu połączenia, komunikacja jest jednostronna – serwer wysyła ko
 
 ### Katalog Zdarzeń i Struktura Payloadów
 
-Poniżej znajduje się kompletna lista wszystkich typów zdarzeń (`event_type`) i opis ich `payload`.
-
 | Event Type | Opis | Struktura `payload` | Odbiorcy |
 | :--- | :--- | :--- | :--- |
-| **`node_created`** | Utworzono nowy plik lub folder. | Pełny obiekt `Node`. | Twórca, Właściciel folderu nadrzędnego |
-| **`nodes_copied`** | Skopiowano jeden lub więcej plików/folderów. | Tablica `[]` pełnych obiektów `Node`. | Kopiujący, Właściciel folderu docelowego |
-| **`node_renamed`** | Zmieniono nazwę pliku/folderu. | `{ "id", "new_name", "old_name" }` | Osoba modyfikująca, Właściciel |
-| **`node_moved`** | Przeniesiono plik/folder. | `{ "id", "new_parent_id", "old_parent_id" }` | Osoba modyfikująca, Właściciel |
+| **`node_created`** | Utworzono nowy plik lub folder. | Pełny obiekt `RichNode`. | Twórca, Właściciel folderu nadrzędnego |
+| **`nodes_copied`** | Skopiowano jeden lub więcej plików/folderów. | Tablica `[]` pełnych obiektów `RichNode`. | Kopiujący, Właściciel folderu docelowego |
+| **`node_updated`** | Zmieniono właściwość węzła (nazwa, rodzic, ulubione). | Pełny, zaktualizowany obiekt `RichNode`. | Osoba modyfikująca, Właściciel |
 | **`node_trashed`** | Przeniesiono plik/folder do kosza. | `{ "id", "parent_id" }` | Osoba usuwająca, Właściciel |
-| **`node_restored`** | Przywrócono plik/folder z kosza. | Pełny obiekt `Node`. | Właściciel |
-| **`favorite_added`** | Dodano obiekt do ulubionych. | `{ "node_id" }` | Tylko osoba wykonująca akcję |
-| **`favorite_removed`** | Usunięto obiekt z ulubionych. | `{ "node_id" }` | Tylko osoba wykonująca akcję |
+| **`nodes_restored`**| Przywrócono jeden lub więcej plików/folderów z kosza. | Tablica `[]` pełnych obiektów `RichNode`. | Właściciel |
+| **`node_purged`**| Trwale usunięto element z kosza. | `{ "id" }` | Właściciel |
 | **`node_shared_with_you`** | Ktoś udostępnił Ci zasób. | `{ "share_info", "node_info" }` | Tylko Odbiorca udostępnienia |
 | **`node_share_created`** | Potwierdzenie, że udostępniłeś zasób. | `{ "share_info", "node_info", "recipient_username" }` | Tylko Udostępniający |
 | **`share_revoked_for_you`** | Ktoś cofnął dla Ciebie udostępnienie. | `{ "node_id" }` | Tylko Odbiorca udostępnienia |
@@ -268,18 +283,9 @@ Poniżej znajduje się kompletna lista wszystkich typów zdarzeń (`event_type`)
 
 ---
 
-## Roadmap / TODO
+## Roadmap / Potencjalne Ulepszenia
 
-Lista zidentyfikowanych ograniczeń i planowanych do wdrożenia funkcjonalności, które wykraczają poza obecny zakres projektu.
-
-### Ograniczenia do Naprawy w Przyszłości
-
--   [ ] **Niekompletne przywracanie z kosza:** Przywrócenie usuniętego folderu odtwarza tylko sam folder, bez jego zawartości. W przyszłości należy zaimplementować rekurencyjne przywracanie z obsługą konfliktów nazw.
--   [ ] **Brak obsługi bardzo dużych plików:** Obecne ograniczenie uploadu (aktualnie 1 GB na cały request) i brak mechanizmu "chunked upload" uniemożliwia wgrywanie plików o dużym rozmiarze.
--   [ ] **Wysokie zużycie RAM przy archiwizacji:** Mechanizm tworzenia archiwum ZIP może być nieefektywny przy bardzo dużych strukturach folderów.
--   [ ] **Natychmiastowe unieważnianie tokenów (Blacklisting):** Obecnie `access token` jest ważny do momentu naturalnego wygaśnięcia. W przyszłości można zaimplementować mechanizm "czarnej listy" do natychmiastowego unieważniania tokenów.
-
-### Nowe Funkcje do Implementacji w Przyszłości
-
--   [ ] **Filtrowanie i Sortowanie Wyników:** Rozbudowa istniejących endpointów listujących o zaawansowane opcje filtrowania i sortowania.
--   [ ] **Dziennik Audytowy (Audit Log):** Stworzenie oddzielnego, niezmiennego dziennika zdarzeń krytycznych dla bezpieczeństwa.
+-   **Wysokie zużycie RAM przy archiwizacji:** Mechanizm tworzenia archiwum ZIP może być nieefektywny przy bardzo dużych strukturach folderów i mógłby zostać zoptymalizowany (streaming).
+-   **Natychmiastowe unieważnianie tokenów (Blacklisting):** Obecnie `access token` jest ważny do momentu naturalnego wygaśnięcia. W przyszłości można zaimplementować mechanizm "czarnej listy" do natychmiastowego unieważniania tokenów po wylogowaniu.
+-   **Filtrowanie i Sortowanie Wyników:** Rozbudowa istniejących endpointów listujących o zaawansowane opcje filtrowania (np. po typie pliku, dacie).
+-   **Dziennik Audytowy (Audit Log):** Stworzenie oddzielnego, niezmiennego dziennika zdarzeń krytycznych dla bezpieczeństwa i administracji.
