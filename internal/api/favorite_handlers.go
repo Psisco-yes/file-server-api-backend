@@ -106,8 +106,7 @@ func (s *Server) RemoveFavoriteHandler(w http.ResponseWriter, r *http.Request) {
 // @Security     BearerAuth
 // @Param        limit      query     int     false  "Number of items to return" default(100)
 // @Param        offset     query     int     false  "Offset for pagination" default(0)
-// @Param        sortBy     query     string  false  "Sort by field (name, size, modifiedAt)" enums(name,size,modifiedAt)
-// @Param        sortOrder  query     string  false  "Sort order (asc, desc)" enums(asc,desc)
+// @Param        sort       query     string  false  "Sort order. Comma-separated list of fields. Use '-' for descending. E.g., 'type,-name'"
 // @Success      200  {array}   models.RichNode
 // @Failure      401  {string}  string "Unauthorized"
 // @Failure      500  {string}  string "Internal Server Error"
@@ -115,10 +114,9 @@ func (s *Server) RemoveFavoriteHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) ListFavoritesHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 	limit, offset := parsePagination(r)
-	sortBy := r.URL.Query().Get("sortBy")
-	sortOrder := r.URL.Query().Get("sortOrder")
+	sort := r.URL.Query().Get("sort")
 
-	nodes, err := s.store.GetRichFavorites(r.Context(), claims.UserID, limit, offset, sortBy, sortOrder)
+	nodes, err := s.store.GetRichFavorites(r.Context(), claims.UserID, limit, offset, sort)
 	if err != nil {
 		http.Error(w, "Failed to list favorites", http.StatusInternalServerError)
 		return

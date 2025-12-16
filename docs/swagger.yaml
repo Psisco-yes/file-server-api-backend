@@ -438,20 +438,10 @@ paths:
         in: query
         name: offset
         type: integer
-      - description: Sort by field (name, size, modifiedAt)
-        enum:
-        - name
-        - size
-        - modifiedAt
+      - description: Sort order. Comma-separated list of fields. Use '-' for descending.
+          E.g., 'type,-name'
         in: query
-        name: sortBy
-        type: string
-      - description: Sort order (asc, desc)
-        enum:
-        - asc
-        - desc
-        in: query
-        name: sortOrder
+        name: sort
         type: string
       produces:
       - application/json
@@ -592,20 +582,10 @@ paths:
         in: query
         name: offset
         type: integer
-      - description: Sort by field (name, size, modifiedAt)
-        enum:
-        - name
-        - size
-        - modifiedAt
+      - description: Sort order. Comma-separated list of fields. Use '-' for descending.
+          E.g., 'type,-name'
         in: query
-        name: sortBy
-        type: string
-      - description: Sort order (asc, desc)
-        enum:
-        - asc
-        - desc
-        in: query
-        name: sortOrder
+        name: sort
         type: string
       produces:
       - application/json
@@ -1316,20 +1296,10 @@ paths:
         in: query
         name: offset
         type: integer
-      - description: Sort by field (name, size, modifiedAt)
-        enum:
-        - name
-        - size
-        - modifiedAt
+      - description: Sort order. Comma-separated list of fields. Use '-' for descending.
+          E.g., 'type,-name'
         in: query
-        name: sortBy
-        type: string
-      - description: Sort order (asc, desc)
-        enum:
-        - asc
-        - desc
-        in: query
-        name: sortOrder
+        name: sort
         type: string
       produces:
       - application/json
@@ -1501,20 +1471,10 @@ paths:
         in: query
         name: offset
         type: integer
-      - description: Sort by field (name, size, modifiedAt)
-        enum:
-        - name
-        - size
-        - modifiedAt
+      - description: Sort order. Comma-separated list of fields. Use '-' for descending.
+          E.g., 'type,-name'
         in: query
-        name: sortBy
-        type: string
-      - description: Sort order (asc, desc)
-        enum:
-        - asc
-        - desc
-        in: query
-        name: sortOrder
+        name: sort
         type: string
       produces:
       - application/json
@@ -1588,20 +1548,10 @@ paths:
         in: query
         name: offset
         type: integer
-      - description: Sort by field (name, size, modifiedAt)
-        enum:
-        - name
-        - size
-        - modifiedAt
+      - description: Sort order. Comma-separated list of fields. Use '-' for descending.
+          E.g., 'type,-name'
         in: query
-        name: sortBy
-        type: string
-      - description: Sort order (asc, desc)
-        enum:
-        - asc
-        - desc
-        in: query
-        name: sortOrder
+        name: sort
         type: string
       produces:
       - application/json
@@ -1640,20 +1590,10 @@ paths:
         in: query
         name: offset
         type: integer
-      - description: Sort by field (name, size, modifiedAt)
-        enum:
-        - name
-        - size
-        - modifiedAt
+      - description: Sort order. Comma-separated list of fields. Use '-' for descending.
+          E.g., 'type,-name'
         in: query
-        name: sortBy
-        type: string
-      - description: Sort order (asc, desc)
-        enum:
-        - asc
-        - desc
-        in: query
-        name: sortOrder
+        name: sort
         type: string
       produces:
       - application/json

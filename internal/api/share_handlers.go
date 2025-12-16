@@ -154,8 +154,7 @@ func (s *Server) ListSharingUsersHandler(w http.ResponseWriter, r *http.Request)
 // @Param        parent_id        query     string  false  "ID of the shared parent folder to list. Omit for the root of shared items."
 // @Param        limit            query     int     false  "Number of items to return" default(100)
 // @Param        offset           query     int     false  "Offset for pagination" default(0)
-// @Param        sortBy           query     string  false  "Sort by field (name, size, modifiedAt)" enums(name,size,modifiedAt)
-// @Param        sortOrder        query     string  false  "Sort order (asc, desc)" enums(asc,desc)
+// @Param        sort       query     string  false  "Sort order. Comma-separated list of fields. Use '-' for descending. E.g., 'type,-name'"
 // @Success      200              {array}   models.RichNode
 // @Failure      400              {string}  string "Bad Request"
 // @Failure      401              {string}  string "Unauthorized"
@@ -165,8 +164,7 @@ func (s *Server) ListSharingUsersHandler(w http.ResponseWriter, r *http.Request)
 func (s *Server) ListSharedNodesHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 	limit, offset := parsePagination(r)
-	sortBy := r.URL.Query().Get("sortBy")
-	sortOrder := r.URL.Query().Get("sortOrder")
+	sort := r.URL.Query().Get("sort")
 
 	sharerUsername := r.URL.Query().Get("sharer_username")
 	if sharerUsername == "" {
@@ -188,7 +186,7 @@ func (s *Server) ListSharedNodesHandler(w http.ResponseWriter, r *http.Request) 
 	parentIDStr := r.URL.Query().Get("parent_id")
 
 	if parentIDStr == "" {
-		nodes, err := s.store.ListRichDirectlySharedNodes(r.Context(), claims.UserID, sharer.ID, limit, offset, sortBy, sortOrder)
+		nodes, err := s.store.ListRichDirectlySharedNodes(r.Context(), claims.UserID, sharer.ID, limit, offset, sort)
 		if err != nil {
 			log.Printf("ERROR: Failed to list rich directly shared nodes for user %d from sharer %d: %v", claims.UserID, sharer.ID, err)
 			http.Error(w, "Failed to list shared nodes", http.StatusInternalServerError)
@@ -210,7 +208,7 @@ func (s *Server) ListSharedNodesHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	nodes, err := s.store.GetRichNodesByParentID(r.Context(), sharer.ID, claims.UserID, &parentIDStr, limit, offset, sortBy, sortOrder)
+	nodes, err := s.store.GetRichNodesByParentID(r.Context(), sharer.ID, claims.UserID, &parentIDStr, limit, offset, sort)
 	if err != nil {
 		log.Printf("ERROR: Failed to list children for shared node %s: %v", parentIDStr, err)
 		http.Error(w, "Failed to list shared nodes content", http.StatusInternalServerError)
@@ -300,8 +298,7 @@ func (s *Server) DeleteShareHandler(w http.ResponseWriter, r *http.Request) {
 // @Security     BearerAuth
 // @Param        limit      query     int     false  "Number of items to return" default(100)
 // @Param        offset     query     int     false  "Offset for pagination" default(0)
-// @Param        sortBy     query     string  false  "Sort by field (name, size, modifiedAt)" enums(name,size,modifiedAt)
-// @Param        sortOrder  query     string  false  "Sort order (asc, desc)" enums(asc,desc)
+// @Param        sort       query     string  false  "Sort order. Comma-separated list of fields. Use '-' for descending. E.g., 'type,-name'"
 // @Success      200  {array}   models.RichNode
 // @Failure      401  {string}  string "Unauthorized"
 // @Failure      500  {string}  string "Internal Server Error"
@@ -309,10 +306,9 @@ func (s *Server) DeleteShareHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) ListOutgoingSharedNodesHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 	limit, offset := parsePagination(r)
-	sortBy := r.URL.Query().Get("sortBy")
-	sortOrder := r.URL.Query().Get("sortOrder")
+	sort := r.URL.Query().Get("sort")
 
-	nodes, err := s.store.GetRichOutgoingSharedNodes(r.Context(), claims.UserID, limit, offset, sortBy, sortOrder)
+	nodes, err := s.store.GetRichOutgoingSharedNodes(r.Context(), claims.UserID, limit, offset, sort)
 	if err != nil {
 		http.Error(w, "Failed to retrieve outgoing shared nodes", http.StatusInternalServerError)
 		return

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -54,7 +55,7 @@ func TestAPI_CreateFolder_Success(t *testing.T) {
 	http.HandlerFunc(testServer.CreateFolderHandler).ServeHTTP(rr, req)
 
 	require.Equal(t, http.StatusCreated, rr.Code)
-	var createdNode models.Node
+	var createdNode models.RichNode
 	err := json.Unmarshal(rr.Body.Bytes(), &createdNode)
 	require.NoError(t, err)
 	require.Equal(t, "Nowy_Folder_Sukces", createdNode.Name)
@@ -78,7 +79,7 @@ func TestAPI_CreateFolder_NameConflict(t *testing.T) {
 
 	var initialCount int
 	err := testServer.store.GetPool().QueryRow(context.Background(),
-		"SELECT count(*) FROM nodes WHERE name=$1 AND owner_id=$2 AND parent_id IS NULL",
+		"SELECT count(*) FROM nodes WHERE name=$1 AND owner_id=$2 AND parent_id IS NULL AND deleted_at IS NULL",
 		folderName, testUserClaims.UserID).Scan(&initialCount)
 	require.NoError(t, err)
 	require.Equal(t, 1, initialCount, "SETUP FAILED: Node should be in DB before API call")
@@ -106,23 +107,27 @@ func TestAPI_CreateFolder_NameConflict(t *testing.T) {
 	require.Equal(t, http.StatusConflict, rr.Code, "Expected a conflict when creating a folder with a duplicate name")
 }
 
-func TestListNodesHandler(t *testing.T) {
-	testUser := testUserClaims
+func TestListNodesHandler_Sorting(t *testing.T) {
+	user := createTestUserWithPassword(t, "user_multi_sort", "password")
+	loginResp := loginUserForTest(t, "user_multi_sort", "password")
 
-	_, err := testServer.store.GetPool().Exec(context.Background(), "DELETE FROM nodes WHERE owner_id = $1 AND parent_id IS NULL", testUser.UserID)
+	_, err := testServer.store.GetPool().Exec(context.Background(), "DELETE FROM nodes WHERE owner_id = $1 AND parent_id IS NULL", user.ID)
 	require.NoError(t, err)
+
+	nodeA, _ := createTestNodeAPI(t, "A_Folder", "folder", nil, user.ID)
+	nodeB, _ := createTestNodeAPI(t, "B_Folder", "folder", nil, user.ID)
+	nodeX, _ := createTestNodeAPI(t, "X_File.txt", "file", nil, user.ID)
+	nodeZ, _ := createTestNodeAPI(t, "Z_File.txt", "file", nil, user.ID)
 
 	var size1 int64 = 100
 	var size2 int64 = 500
-	nodeA, _ := createTestNodeAPI(t, "A_File", "file", nil, testUser.UserID)
-	nodeZ, _ := createTestNodeAPI(t, "Z_File", "file", nil, testUser.UserID)
-	nodeC, _ := createTestNodeAPI(t, "C_Folder", "folder", nil, testUser.UserID)
-
-	_, err = testServer.store.GetPool().Exec(context.Background(), "UPDATE nodes SET size_bytes = $1, modified_at = $2 WHERE id = $3", size1, time.Now().Add(-1*time.Hour), nodeA.ID)
+	_, err = testServer.store.GetPool().Exec(context.Background(), "UPDATE nodes SET size_bytes = $1, modified_at = $2 WHERE id = $3", size1, time.Now().Add(-2*time.Hour), nodeA.ID)
+	require.NoError(t, err)
+	_, err = testServer.store.GetPool().Exec(context.Background(), "UPDATE nodes SET size_bytes = $1, modified_at = $2 WHERE id = $3", size1, time.Now().Add(-1*time.Hour), nodeB.ID)
+	require.NoError(t, err)
+	_, err = testServer.store.GetPool().Exec(context.Background(), "UPDATE nodes SET size_bytes = $1, modified_at = $2 WHERE id = $3", size1, time.Now().Add(-30*time.Minute), nodeX.ID)
 	require.NoError(t, err)
 	_, err = testServer.store.GetPool().Exec(context.Background(), "UPDATE nodes SET size_bytes = $1, modified_at = $2 WHERE id = $3", size2, time.Now(), nodeZ.ID)
-	require.NoError(t, err)
-	_, err = testServer.store.GetPool().Exec(context.Background(), "UPDATE nodes SET modified_at = $1 WHERE id = $2", time.Now().Add(-30*time.Minute), nodeC.ID)
 	require.NoError(t, err)
 
 	router := chi.NewRouter()
@@ -131,43 +136,40 @@ func TestListNodesHandler(t *testing.T) {
 
 	runSortTest := func(t *testing.T, url string, expectedOrder []string) {
 		req := httptest.NewRequest("GET", url, nil)
-		req.Header.Set("Authorization", "Bearer "+testUserToken)
+		req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 
 		require.Equal(t, http.StatusOK, rr.Code)
 		var nodes []*models.RichNode
-		err := json.Unmarshal(rr.Body.Bytes(), &nodes)
-		require.NoError(t, err)
+		json.Unmarshal(rr.Body.Bytes(), &nodes)
 
 		require.Len(t, nodes, len(expectedOrder))
-		for i, expectedName := range expectedOrder {
-			require.Equal(t, expectedName, nodes[i].Name, "item at index %d has wrong name", i)
+		var actualOrder []string
+		for _, n := range nodes {
+			actualOrder = append(actualOrder, n.Name)
 		}
+		require.Equal(t, expectedOrder, actualOrder, "Sort order is incorrect")
 	}
 
-	t.Run("default sort", func(t *testing.T) {
-		runSortTest(t, "/api/v1/nodes", []string{"C_Folder", "A_File", "Z_File"})
+	t.Run("default sort (type desc, name asc)", func(t *testing.T) {
+		runSortTest(t, "/api/v1/nodes", []string{"A_Folder", "B_Folder", "X_File.txt", "Z_File.txt"})
 	})
 
-	t.Run("sort by name ascending", func(t *testing.T) {
-		runSortTest(t, "/api/v1/nodes?sortBy=name&sortOrder=asc", []string{"A_File", "C_Folder", "Z_File"})
+	t.Run("single column sort (name descending)", func(t *testing.T) {
+		runSortTest(t, "/api/v1/nodes?sort=-name", []string{"Z_File.txt", "X_File.txt", "B_Folder", "A_Folder"})
 	})
 
-	t.Run("sort by name descending", func(t *testing.T) {
-		runSortTest(t, "/api/v1/nodes?sortBy=name&sortOrder=desc", []string{"Z_File", "C_Folder", "A_File"})
+	t.Run("multi-column sort (type asc, name desc)", func(t *testing.T) {
+		runSortTest(t, "/api/v1/nodes?sort=-type,-name", []string{"Z_File.txt", "X_File.txt", "B_Folder", "A_Folder"})
 	})
 
-	t.Run("sort by size ascending", func(t *testing.T) {
-		runSortTest(t, "/api/v1/nodes?sortBy=size&sortOrder=asc", []string{"C_Folder", "A_File", "Z_File"})
-	})
-
-	t.Run("sort by modified date descending", func(t *testing.T) {
-		runSortTest(t, "/api/v1/nodes?sortBy=modifiedAt&sortOrder=desc", []string{"Z_File", "C_Folder", "A_File"})
+	t.Run("multi-column sort (type desc, name desc)", func(t *testing.T) {
+		runSortTest(t, "/api/v1/nodes?sort=type,-name", []string{"B_Folder", "A_Folder", "Z_File.txt", "X_File.txt"})
 	})
 
 	t.Run("sort by invalid column falls back to default", func(t *testing.T) {
-		runSortTest(t, "/api/v1/nodes?sortBy=drop-tables", []string{"C_Folder", "A_File", "Z_File"})
+		runSortTest(t, "/api/v1/nodes?sort=drop-tables", []string{"A_Folder", "B_Folder", "X_File.txt", "Z_File.txt"})
 	})
 }
 
@@ -353,7 +355,7 @@ func TestUploadFileHandler(t *testing.T) {
 
 	require.Equal(t, http.StatusCreated, rr.Code)
 
-	var createdNodes []models.Node
+	var createdNodes []models.RichNode
 	err = json.Unmarshal(rr.Body.Bytes(), &createdNodes)
 	require.NoError(t, err)
 	require.Len(t, createdNodes, 1)
@@ -552,6 +554,7 @@ func TestShareAndFavorite_Integration(t *testing.T) {
 
 	router := chi.NewRouter()
 	router.Use(testServer.AuthMiddleware)
+	router.Post("/api/v1/nodes/folder", testServer.CreateFolderHandler)
 	router.Post("/api/v1/nodes/{nodeId}/share", testServer.ShareNodeHandler)
 	router.Get("/api/v1/shares/incoming/nodes", testServer.ListSharedNodesHandler)
 	router.Post("/api/v1/nodes/{nodeId}/favorite", testServer.AddFavoriteHandler)
@@ -610,7 +613,7 @@ func TestShareAndFavorite_Integration(t *testing.T) {
 		router.ServeHTTP(rrList, reqList)
 
 		require.Equal(t, http.StatusOK, rrList.Code)
-		var favs []models.Node
+		var favs []*models.RichNode
 		err := json.Unmarshal(rrList.Body.Bytes(), &favs)
 		require.NoError(t, err)
 		require.Len(t, favs, 1)
@@ -625,7 +628,7 @@ func TestShareAndFavorite_Integration(t *testing.T) {
 		router.ServeHTTP(rr, req)
 		require.Equal(t, http.StatusNoContent, rr.Code)
 
-		favs, err := testServer.store.ListFavorites(context.Background(), recipient.ID, 10, 0)
+		favs, err := testServer.store.GetRichFavorites(context.Background(), recipient.ID, 10, 0, "")
 		require.NoError(t, err)
 		require.Len(t, favs, 0)
 	})
@@ -669,7 +672,6 @@ func TestShareAndFavorite_Integration(t *testing.T) {
 func TestPermissions_ReadOnlyShare(t *testing.T) {
 	sharer := createTestUserWithPassword(t, "user_perm_sharer", "password")
 	recipient := createTestUserWithPassword(t, "user_perm_recipient", "password")
-	loginUserForTest(t, "user_perm_sharer", "password")
 	recipientLogin := loginUserForTest(t, "user_perm_recipient", "password")
 
 	readOnlyFolder, _ := createTestNodeAPI(t, "ReadOnlySharedFolder", "folder", nil, sharer.ID)
@@ -811,7 +813,7 @@ func TestTrashHandlers_Integration(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 0, count)
 
-		trashItems, _ := testServer.store.GetRichTrash(context.Background(), testUser.ID, 10, 0, "", "")
+		trashItems, _ := testServer.store.GetRichTrash(context.Background(), testUser.ID, 10, 0, "")
 		require.Len(t, trashItems, 1)
 		require.Equal(t, fileToKeep.ID, trashItems[0].ID)
 	})
@@ -1213,7 +1215,7 @@ func TestCopyNodeHandler_Integration(t *testing.T) {
 		router.ServeHTTP(rr, req)
 
 		require.Equal(t, http.StatusCreated, rr.Code)
-		var copiedNode models.Node
+		var copiedNode models.RichNode
 		json.Unmarshal(rr.Body.Bytes(), &copiedNode)
 		require.Equal(t, sourceFile.Name, copiedNode.Name)
 		require.Equal(t, targetFolder.ID, *copiedNode.ParentID)
@@ -1270,7 +1272,7 @@ func TestCopyNodeHandler_Integration(t *testing.T) {
 		require.Equal(t, newName, copiedFolder.Name)
 		require.Equal(t, user.Username, copiedFolder.Owner.Username)
 
-		children, err := testServer.store.GetRichNodesByParentID(context.Background(), user.ID, user.ID, &copiedFolder.ID, 10, 0, "", "")
+		children, err := testServer.store.GetRichNodesByParentID(context.Background(), user.ID, user.ID, &copiedFolder.ID, 10, 0, "")
 		require.NoError(t, err)
 		require.Len(t, children, 1)
 		require.Equal(t, "wewnetrzny.txt", children[0].Name)
@@ -1368,7 +1370,7 @@ func TestSearchHandler_Integration(t *testing.T) {
 		router.ServeHTTP(rr, req)
 
 		require.Equal(t, http.StatusOK, rr.Code)
-		var results []*models.RichNode // <-- ZMIANA
+		var results []*models.RichNode
 		json.Unmarshal(rr.Body.Bytes(), &results)
 		require.Len(t, results, 0, "Should not find private files of other users")
 	})
@@ -1864,7 +1866,7 @@ func TestListOutgoingSharedNodesHandler(t *testing.T) {
 	})
 
 	t.Run("returns nodes sorted by name descending", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/api/v1/shares/outgoing/nodes?sortBy=name&sortOrder=desc", nil)
+		req := httptest.NewRequest("GET", "/api/v1/shares/outgoing/nodes?sort=-name", nil)
 		req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
@@ -1876,5 +1878,149 @@ func TestListOutgoingSharedNodesHandler(t *testing.T) {
 		require.Len(t, nodes, 2)
 		require.Equal(t, "Z_Shared_Once", nodes[0].Name)
 		require.Equal(t, "A_Shared_Twice", nodes[1].Name)
+	})
+}
+
+func TestInputValidation(t *testing.T) {
+	createTestUserWithPassword(t, "user_validation", "password")
+	loginResp := loginUserForTest(t, "user_validation", "password")
+
+	router := chi.NewRouter()
+	router.Use(testServer.AuthMiddleware)
+	router.Post("/api/v1/nodes/folder", testServer.CreateFolderHandler)
+	router.Get("/api/v1/nodes", testServer.ListNodesHandler)
+
+	t.Run("rejects overly long names", func(t *testing.T) {
+		longName := strings.Repeat("a", 256)
+		payload := CreateFolderRequest{Name: longName}
+		body, _ := json.Marshal(payload)
+		req := httptest.NewRequest("POST", "/api/v1/nodes/folder", bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusInternalServerError, rr.Code)
+	})
+
+	t.Run("handles invalid pagination parameters gracefully", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/v1/nodes?limit=-10", nil)
+		req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+		require.Equal(t, http.StatusOK, rr.Code)
+
+		req = httptest.NewRequest("GET", "/api/v1/nodes?offset=abc", nil)
+		req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rr = httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+		require.Equal(t, http.StatusOK, rr.Code)
+	})
+}
+
+func TestPermissions_NestedShare(t *testing.T) {
+	sharer := createTestUserWithPassword(t, "user_nested_share_owner", "password")
+	recipient := createTestUserWithPassword(t, "user_nested_share_recipient", "password")
+	recipientLogin := loginUserForTest(t, "user_nested_share_recipient", "password")
+
+	parent, _ := createTestNodeAPI(t, "Parent", "folder", nil, sharer.ID)
+	child, _ := createTestNodeAPI(t, "Child", "folder", &parent.ID, sharer.ID)
+	grandchild, _ := createTestNodeAPI(t, "Grandchild", "file", &child.ID, sharer.ID)
+
+	_, err := testServer.store.ShareNode(context.Background(), database.ShareNodeParams{
+		NodeID: parent.ID, SharerID: sharer.ID, RecipientID: recipient.ID, Permissions: "read",
+	})
+	require.NoError(t, err)
+
+	_, err = testServer.store.ShareNode(context.Background(), database.ShareNodeParams{
+		NodeID: child.ID, SharerID: sharer.ID, RecipientID: recipient.ID, Permissions: "write",
+	})
+	require.NoError(t, err)
+
+	router := chi.NewRouter()
+	router.Use(testServer.AuthMiddleware)
+	router.Get("/api/v1/nodes/{nodeId}", testServer.GetNodeHandler)
+
+	t.Run("more specific permission (write) overrides parent permission (read)", func(t *testing.T) {
+		url := fmt.Sprintf("/api/v1/nodes/%s", grandchild.ID)
+		req := httptest.NewRequest("GET", url, nil)
+		req.Header.Set("Authorization", "Bearer "+recipientLogin.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusOK, rr.Code)
+		var resp NodeDetailResponse
+		json.Unmarshal(rr.Body.Bytes(), &resp)
+
+		require.NotNil(t, resp.Permissions)
+		require.Equal(t, "write", *resp.Permissions, "Permission for Grandchild should be 'write', inherited from Child")
+	})
+
+	t.Run("less specific permission (read) is used when no other applies", func(t *testing.T) {
+		url := fmt.Sprintf("/api/v1/nodes/%s", parent.ID)
+		req := httptest.NewRequest("GET", url, nil)
+		req.Header.Set("Authorization", "Bearer "+recipientLogin.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusOK, rr.Code)
+		var resp NodeDetailResponse
+		json.Unmarshal(rr.Body.Bytes(), &resp)
+
+		require.NotNil(t, resp.Permissions)
+		require.Equal(t, "read", *resp.Permissions, "Permission for Parent should be 'read'")
+	})
+}
+
+func TestAuthMiddleware(t *testing.T) {
+	router := chi.NewRouter()
+	router.With(testServer.AuthMiddleware).Get("/api/v1/me", testServer.GetCurrentUserHandler)
+
+	t.Run("request with no token returns 401", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/v1/me", nil)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+		require.Equal(t, http.StatusUnauthorized, rr.Code)
+	})
+
+	t.Run("request with invalid token format returns 401", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/v1/me", nil)
+		req.Header.Set("Authorization", "Bearerinvalid_token")
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+		require.Equal(t, http.StatusUnauthorized, rr.Code)
+	})
+
+	t.Run("request with token signed by wrong secret returns 401", func(t *testing.T) {
+		user := &models.User{ID: 999, Username: "fakeuser"}
+		wrongToken, err := auth.GenerateJWT(user, "this_is_a_wrong_secret")
+		require.NoError(t, err)
+
+		req := httptest.NewRequest("GET", "/api/v1/me", nil)
+		req.Header.Set("Authorization", "Bearer "+wrongToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+		require.Equal(t, http.StatusUnauthorized, rr.Code)
+	})
+
+	t.Run("request with expired token returns 401", func(t *testing.T) {
+		secret := testServer.config.JWT.Secret
+		expirationTime := time.Now().Add(1 * time.Nanosecond)
+		claims := &auth.AppClaims{
+			UserID: 1, Username: "expired_user",
+			RegisteredClaims: jwt.RegisteredClaims{
+				ExpiresAt: jwt.NewNumericDate(expirationTime),
+			},
+		}
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+		expiredToken, err := token.SignedString([]byte(secret))
+		require.NoError(t, err)
+
+		time.Sleep(5 * time.Millisecond)
+
+		req := httptest.NewRequest("GET", "/api/v1/me", nil)
+		req.Header.Set("Authorization", "Bearer "+expiredToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+		require.Equal(t, http.StatusUnauthorized, rr.Code)
 	})
 }

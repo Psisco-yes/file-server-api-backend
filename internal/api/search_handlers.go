@@ -14,8 +14,7 @@ import (
 // @Param        q      query     string  true  "Search query string"
 // @Param        limit  query     int     false "Number of items to return" default(100)
 // @Param        offset query     int     false "Offset for pagination" default(0)
-// @Param        sortBy     query     string  false  "Sort by field (name, size, modifiedAt)" enums(name,size,modifiedAt)
-// @Param        sortOrder  query     string  false  "Sort order (asc, desc)" enums(asc,desc)
+// @Param        sort       query     string  false  "Sort order. Comma-separated list of fields. Use '-' for descending. E.g., 'type,-name'"
 // @Success      200    {array}   models.RichNode
 // @Failure      400    {string}  string "Bad Request - Missing query"
 // @Failure      401    {string}  string "Unauthorized"
@@ -24,8 +23,7 @@ import (
 func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
 	limit, offset := parsePagination(r)
-	sortBy := r.URL.Query().Get("sortBy")
-	sortOrder := r.URL.Query().Get("sortOrder")
+	sort := r.URL.Query().Get("sort")
 
 	query := r.URL.Query().Get("q")
 	if query == "" {
@@ -33,7 +31,7 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	nodes, err := s.store.SearchRichNodes(r.Context(), claims.UserID, query, limit, offset, sortBy, sortOrder)
+	nodes, err := s.store.SearchRichNodes(r.Context(), claims.UserID, query, limit, offset, sort)
 	if err != nil {
 		http.Error(w, "Failed to perform search", http.StatusInternalServerError)
 		return

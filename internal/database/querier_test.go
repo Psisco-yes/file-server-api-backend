@@ -83,32 +83,30 @@ func TestRemoveFavorite(t *testing.T) {
 	require.False(t, success)
 }
 
-func TestListFavorites(t *testing.T) {
-	user := createTestUser(t, "user_fav_list")
-	otherUser := createTestUser(t, "other_user_fav_list")
+func TestGetRichFavorites(t *testing.T) {
+	user := createTestUser(t, "user_rich_fav_list")
+	otherUser := createTestUser(t, "other_user_rich_fav_list")
 
-	node1 := createTestNode(t, CreateNodeParams{ID: "fav_list_1", OwnerID: user.ID, Name: "A_My File", NodeType: "file"})
-	node2_shared := createTestNode(t, CreateNodeParams{ID: "fav_list_2", OwnerID: otherUser.ID, Name: "B_Shared File", NodeType: "file"})
-	node3_trashed := createTestNode(t, CreateNodeParams{ID: "fav_list_3", OwnerID: user.ID, Name: "C_Trashed Fav", NodeType: "file"})
+	node1 := createTestNode(t, CreateNodeParams{ID: "rich_fav_list_1", OwnerID: user.ID, Name: "A_My File", NodeType: "file"})
+	node2_shared := createTestNode(t, CreateNodeParams{ID: "rich_fav_list_2", OwnerID: otherUser.ID, Name: "B_Shared File", NodeType: "file"})
 
 	createTestShare(t, ShareNodeParams{NodeID: node2_shared.ID, SharerID: otherUser.ID, RecipientID: user.ID, Permissions: "read"})
-
 	err := testStore.AddFavorite(context.Background(), user.ID, node1.ID)
 	require.NoError(t, err)
 	err = testStore.AddFavorite(context.Background(), user.ID, node2_shared.ID)
 	require.NoError(t, err)
-	err = testStore.AddFavorite(context.Background(), user.ID, node3_trashed.ID)
-	require.NoError(t, err)
 
-	_, err = testStore.MoveNodeToTrash(context.Background(), node3_trashed.ID, user.ID)
-	require.NoError(t, err)
-
-	favorites, err := testStore.ListFavorites(context.Background(), user.ID, 100, 0)
+	favorites, err := testStore.GetRichFavorites(context.Background(), user.ID, 10, 0, "")
 	require.NoError(t, err)
 
 	require.Len(t, favorites, 2)
 	require.Equal(t, "A_My File", favorites[0].Name)
+	require.Equal(t, user.Username, favorites[0].Owner.Username)
+	require.True(t, favorites[0].IsFavorited)
+
 	require.Equal(t, "B_Shared File", favorites[1].Name)
+	require.Equal(t, otherUser.Username, favorites[1].Owner.Username)
+	require.True(t, favorites[1].IsFavorited)
 }
 
 func TestCreateNode(t *testing.T) {
@@ -407,7 +405,7 @@ func TestListRichDirectlySharedNodes(t *testing.T) {
 	err := testStore.AddFavorite(context.Background(), recipient.ID, node4_fav.ID)
 	require.NoError(t, err)
 
-	nodes, err := testStore.ListRichDirectlySharedNodes(context.Background(), recipient.ID, sharer.ID, 100, 0, "", "")
+	nodes, err := testStore.ListRichDirectlySharedNodes(context.Background(), recipient.ID, sharer.ID, 100, 0, "")
 	require.NoError(t, err)
 
 	require.Len(t, nodes, 3)
@@ -1015,7 +1013,7 @@ func TestGetRichNodesByParentID(t *testing.T) {
 
 	plainFile := createTestNode(t, CreateNodeParams{ID: "rich_plain_file", OwnerID: owner.ID, Name: "My Plain", NodeType: "file"})
 
-	nodes, err := testStore.GetRichNodesByParentID(context.Background(), owner.ID, owner.ID, nil, 10, 0, "", "")
+	nodes, err := testStore.GetRichNodesByParentID(context.Background(), owner.ID, owner.ID, nil, 10, 0, "")
 	require.NoError(t, err)
 	require.Len(t, nodes, 3, "Should find 3 nodes in the root for the owner")
 
@@ -1052,7 +1050,7 @@ func TestGetRichTrash(t *testing.T) {
 
 	createTestNode(t, CreateNodeParams{ID: "rich_trash_2", OwnerID: owner.ID, Name: "Not In Trash", NodeType: "file"})
 
-	trashItems, err := testStore.GetRichTrash(context.Background(), owner.ID, 10, 0, "", "")
+	trashItems, err := testStore.GetRichTrash(context.Background(), owner.ID, 10, 0, "")
 	require.NoError(t, err)
 
 	require.Len(t, trashItems, 1, "Should find exactly one item in trash")
@@ -1074,7 +1072,7 @@ func TestSearchRichNodes(t *testing.T) {
 	sharedNode := createTestNode(t, CreateNodeParams{ID: "search_shared_B_to_A", OwnerID: userB.ID, Name: "Wspólny Dokument B", NodeType: "file"})
 	createTestShare(t, ShareNodeParams{NodeID: sharedNode.ID, SharerID: userB.ID, RecipientID: userA.ID, Permissions: "read"})
 
-	results, err := testStore.SearchRichNodes(context.Background(), userA.ID, "Dokument", 10, 0, "", "")
+	results, err := testStore.SearchRichNodes(context.Background(), userA.ID, "Dokument", 10, 0, "")
 	require.NoError(t, err)
 
 	require.Len(t, results, 2)
@@ -1147,4 +1145,129 @@ func TestUploadQueries(t *testing.T) {
 		require.NoError(t, err)
 		require.Nil(t, upload, "Upload session should be nil after deletion")
 	})
+}
+
+func Test_findAvailableName(t *testing.T) {
+	owner := createTestUser(t, "user_find_name")
+	parentFolder := createTestNode(t, CreateNodeParams{ID: "find_name_parent", OwnerID: owner.ID, Name: "Parent", NodeType: "folder"})
+
+	createTestNode(t, CreateNodeParams{ID: "find_name_1", OwnerID: owner.ID, ParentID: &parentFolder.ID, Name: "report.docx", NodeType: "file"})
+	createTestNode(t, CreateNodeParams{ID: "find_name_2", OwnerID: owner.ID, ParentID: &parentFolder.ID, Name: "report (1).docx", NodeType: "file"})
+	createTestNode(t, CreateNodeParams{ID: "find_name_3", OwnerID: owner.ID, ParentID: &parentFolder.ID, Name: "archive", NodeType: "folder"})
+
+	t.Run("finds next available name for file with extension", func(t *testing.T) {
+		availableName, err := testStore.findAvailableName(context.Background(), owner.ID, &parentFolder.ID, "report.docx")
+		require.NoError(t, err)
+		require.Equal(t, "report (2).docx", availableName)
+	})
+
+	t.Run("finds first available name for folder", func(t *testing.T) {
+		availableName, err := testStore.findAvailableName(context.Background(), owner.ID, &parentFolder.ID, "archive")
+		require.NoError(t, err)
+		require.Equal(t, "archive (1)", availableName)
+	})
+
+	t.Run("finds first available name for file without conflict", func(t *testing.T) {
+		availableName, err := testStore.findAvailableName(context.Background(), owner.ID, &parentFolder.ID, "unique_name.txt")
+		require.NoError(t, err)
+		require.Equal(t, "unique_name (1).txt", availableName)
+	})
+}
+
+func TestGetRichOutgoingSharedNodes(t *testing.T) {
+	sharer := createTestUser(t, "sharer_q_outgoing")
+	recipient1 := createTestUser(t, "recipient1_q_outgoing")
+	recipient2 := createTestUser(t, "recipient2_q_outgoing")
+
+	nodeA := createTestNode(t, CreateNodeParams{ID: "q_outgoing_A", OwnerID: sharer.ID, Name: "A_Shared", NodeType: "file"})
+	nodeZ := createTestNode(t, CreateNodeParams{ID: "q_outgoing_Z", OwnerID: sharer.ID, Name: "Z_Shared", NodeType: "file"})
+
+	createTestShare(t, ShareNodeParams{NodeID: nodeA.ID, SharerID: sharer.ID, RecipientID: recipient1.ID, Permissions: "read"})
+	createTestShare(t, ShareNodeParams{NodeID: nodeA.ID, SharerID: sharer.ID, RecipientID: recipient2.ID, Permissions: "read"})
+	createTestShare(t, ShareNodeParams{NodeID: nodeZ.ID, SharerID: sharer.ID, RecipientID: recipient1.ID, Permissions: "read"})
+
+	err := testStore.AddFavorite(context.Background(), sharer.ID, nodeZ.ID)
+	require.NoError(t, err)
+
+	t.Run("default sort", func(t *testing.T) {
+		nodes, err := testStore.GetRichOutgoingSharedNodes(context.Background(), sharer.ID, 10, 0, "")
+		require.NoError(t, err)
+
+		require.Len(t, nodes, 2, "Should return 2 unique nodes")
+
+		require.Equal(t, "A_Shared", nodes[0].Name)
+		require.Equal(t, "Z_Shared", nodes[1].Name)
+
+		require.False(t, nodes[0].IsFavorited)
+		require.True(t, nodes[0].IsShared)
+		require.NotNil(t, nodes[0].Permissions)
+		require.Equal(t, "owner", *nodes[0].Permissions)
+
+		require.True(t, nodes[1].IsFavorited)
+		require.True(t, nodes[1].IsShared)
+		require.NotNil(t, nodes[1].Permissions)
+		require.Equal(t, "owner", *nodes[1].Permissions)
+	})
+
+	t.Run("sort by name descending", func(t *testing.T) {
+		nodes, err := testStore.GetRichOutgoingSharedNodes(context.Background(), sharer.ID, 10, 0, "-name")
+		require.NoError(t, err)
+
+		require.Len(t, nodes, 2, "Should return 2 unique nodes")
+
+		require.Equal(t, "Z_Shared", nodes[0].Name)
+		require.Equal(t, "A_Shared", nodes[1].Name)
+	})
+}
+
+func TestGetNodesByParentIDSimple(t *testing.T) {
+	owner := createTestUser(t, "user_get_simple_children")
+
+	parentFolder := createTestNode(t, CreateNodeParams{ID: "simple_parent", OwnerID: owner.ID, Name: "Parent", NodeType: "folder"})
+	childFile := createTestNode(t, CreateNodeParams{ID: "simple_child_file", OwnerID: owner.ID, ParentID: &parentFolder.ID, Name: "Child File", NodeType: "file"})
+	childFolder := createTestNode(t, CreateNodeParams{ID: "simple_child_folder", OwnerID: owner.ID, ParentID: &parentFolder.ID, Name: "Child Folder", NodeType: "folder"})
+
+	grandchild := createTestNode(t, CreateNodeParams{ID: "simple_grandchild", OwnerID: owner.ID, ParentID: &childFolder.ID, Name: "Grandchild", NodeType: "file"})
+
+	children, err := testStore.GetNodesByParentIDSimple(context.Background(), owner.ID, &parentFolder.ID)
+	require.NoError(t, err)
+
+	require.Len(t, children, 2, "Should return exactly two direct children")
+
+	foundNames := make(map[string]bool)
+	for _, node := range children {
+		foundNames[node.Name] = true
+	}
+
+	require.True(t, foundNames[childFile.Name])
+	require.True(t, foundNames[childFolder.Name])
+	require.False(t, foundNames[grandchild.Name], "Should not return grandchildren")
+}
+
+func TestGetSubtree(t *testing.T) {
+	owner := createTestUser(t, "user_get_subtree")
+
+	rootFolder := createTestNode(t, CreateNodeParams{ID: "subtree_root", OwnerID: owner.ID, Name: "Root", NodeType: "folder"})
+	childFolder := createTestNode(t, CreateNodeParams{ID: "subtree_child", OwnerID: owner.ID, ParentID: &rootFolder.ID, Name: "Child", NodeType: "folder"})
+	grandchildFile := createTestNode(t, CreateNodeParams{ID: "subtree_grandchild", OwnerID: owner.ID, ParentID: &childFolder.ID, Name: "Grandchild", NodeType: "file"})
+
+	otherChildFile := createTestNode(t, CreateNodeParams{ID: "subtree_other_child", OwnerID: owner.ID, ParentID: &rootFolder.ID, Name: "Other Child", NodeType: "file"})
+
+	unrelatedFolder := createTestNode(t, CreateNodeParams{ID: "subtree_unrelated", OwnerID: owner.ID, Name: "Unrelated", NodeType: "folder"})
+
+	subtree, err := testStore.GetSubtree(context.Background(), rootFolder.ID)
+	require.NoError(t, err)
+
+	require.Len(t, subtree, 3, "Subtree should contain child, other child, and grandchild")
+
+	foundIDs := make(map[string]bool)
+	for _, node := range subtree {
+		foundIDs[node.ID] = true
+	}
+
+	require.True(t, foundIDs[childFolder.ID])
+	require.True(t, foundIDs[grandchildFile.ID])
+	require.True(t, foundIDs[otherChildFile.ID])
+	require.False(t, foundIDs[rootFolder.ID], "Subtree should not include the root node itself")
+	require.False(t, foundIDs[unrelatedFolder.ID], "Subtree should not include unrelated nodes")
 }

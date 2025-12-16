@@ -255,8 +255,8 @@ func (q *Queries) GetSharingUsers(ctx context.Context, recipientID int64, limit 
 	return users, nil
 }
 
-func (q *Queries) ListRichDirectlySharedNodes(ctx context.Context, recipientID int64, sharerID int64, limit int, offset int, sortBy string, sortOrder string) ([]*models.RichNode, error) {
-	orderByClause := buildOrderByClause(sortBy, sortOrder)
+func (q *Queries) ListRichDirectlySharedNodes(ctx context.Context, recipientID int64, sharerID int64, limit int, offset int, sort string) ([]*models.RichNode, error) {
+	orderByClause := buildOrderByClause(sort)
 
 	query := fmt.Sprintf(`
 		SELECT %s
@@ -1314,11 +1314,11 @@ func (q *Queries) GetRichNodeIfAccessible(ctx context.Context, nodeID string, us
 	return nil, nil
 }
 
-func (q *Queries) GetRichNodesByParentID(ctx context.Context, ownerID int64, requesterID int64, parentID *string, limit int, offset int, sortBy string, sortOrder string) ([]*models.RichNode, error) {
+func (q *Queries) GetRichNodesByParentID(ctx context.Context, ownerID int64, requesterID int64, parentID *string, limit int, offset int, sort string) ([]*models.RichNode, error) {
 	var query string
 	var args []interface{}
 
-	orderByClause := buildOrderByClause(sortBy, sortOrder)
+	orderByClause := buildOrderByClause(sort)
 
 	baseQuery := fmt.Sprintf(`
 		SELECT %s
@@ -1403,8 +1403,8 @@ func (q *Queries) GetRichNodePath(ctx context.Context, nodeID string, requesterI
 	return pathNodes, nil
 }
 
-func (q *Queries) GetRichFavorites(ctx context.Context, requesterID int64, limit int, offset int, sortBy string, sortOrder string) ([]*models.RichNode, error) {
-	orderByClause := buildOrderByClause(sortBy, sortOrder)
+func (q *Queries) GetRichFavorites(ctx context.Context, requesterID int64, limit int, offset int, sort string) ([]*models.RichNode, error) {
+	orderByClause := buildOrderByClause(sort)
 
 	query := fmt.Sprintf(`
 		SELECT %s
@@ -1437,8 +1437,8 @@ func (q *Queries) GetRichFavorites(ctx context.Context, requesterID int64, limit
 	return nodes, nil
 }
 
-func (q *Queries) GetRichTrash(ctx context.Context, ownerID int64, limit int, offset int, sortBy string, sortOrder string) ([]*models.RichNode, error) {
-	orderByClause := buildOrderByClause(sortBy, sortOrder)
+func (q *Queries) GetRichTrash(ctx context.Context, ownerID int64, limit int, offset int, sort string) ([]*models.RichNode, error) {
+	orderByClause := buildOrderByClause(sort)
 
 	query := fmt.Sprintf(`
 		SELECT %s
@@ -1471,9 +1471,9 @@ func (q *Queries) GetRichTrash(ctx context.Context, ownerID int64, limit int, of
 	return nodes, nil
 }
 
-func (q *Queries) SearchRichNodes(ctx context.Context, requesterID int64, searchQuery string, limit int, offset int, sortBy string, sortOrder string) ([]*models.RichNode, error) {
+func (q *Queries) SearchRichNodes(ctx context.Context, requesterID int64, searchQuery string, limit int, offset int, sort string) ([]*models.RichNode, error) {
 	likeQuery := "%" + searchQuery + "%"
-	orderByClause := buildOrderByClause(sortBy, sortOrder)
+	orderByClause := buildOrderByClause(sort)
 
 	query := fmt.Sprintf(`
 		WITH accessible_nodes AS (
@@ -1521,29 +1521,56 @@ func (q *Queries) SearchRichNodes(ctx context.Context, requesterID int64, search
 	return nodes, nil
 }
 
-func buildOrderByClause(sortBy, sortOrder string) string {
-	var column string
-	switch sortBy {
-	case "name":
-		column = "n.name"
-	case "size":
-		column = "n.size_bytes"
-	case "modifiedAt":
-		column = "n.modified_at"
-	default:
+func buildOrderByClause(sort string) string {
+	if sort == "" {
 		return "ORDER BY n.node_type DESC, n.name ASC"
 	}
 
-	order := "ASC"
-	if strings.ToUpper(sortOrder) == "DESC" {
-		order = "DESC"
+	columnMap := map[string]string{
+		"name":       "n.name",
+		"size":       "n.size_bytes",
+		"modifiedAt": "n.modified_at",
+		"type":       "n.node_type",
 	}
 
-	if column == "n.size_bytes" {
-		return fmt.Sprintf("ORDER BY n.node_type DESC, %s %s NULLS LAST", column, order)
+	sortFields := strings.Split(sort, ",")
+	var orderClauses []string
+
+	for _, field := range sortFields {
+		field = strings.TrimSpace(field)
+		order := "ASC"
+
+		if strings.HasPrefix(field, "-") {
+			order = "DESC"
+			field = field[1:]
+		}
+
+		if sqlColumn, ok := columnMap[field]; ok {
+			clause := sqlColumn
+			if field == "size" {
+				if order == "ASC" {
+					clause += " ASC NULLS LAST"
+				} else {
+					clause += " DESC NULLS FIRST"
+				}
+			} else if field == "type" {
+				if order == "ASC" {
+					clause += " DESC"
+				} else {
+					clause += " ASC"
+				}
+			} else {
+				clause += " " + order
+			}
+			orderClauses = append(orderClauses, clause)
+		}
 	}
 
-	return fmt.Sprintf("ORDER BY %s %s", column, order)
+	if len(orderClauses) == 0 {
+		return "ORDER BY n.node_type DESC, n.name ASC"
+	}
+
+	return "ORDER BY " + strings.Join(orderClauses, ", ")
 }
 
 func (q *Queries) PurgeSingleNode(ctx context.Context, ownerID int64, nodeID string) (int, []string, int64, error) {
@@ -1672,8 +1699,8 @@ func (q *Queries) DeleteUpload(ctx context.Context, uploadID uuid.UUID) error {
 	return err
 }
 
-func (q *Queries) GetRichOutgoingSharedNodes(ctx context.Context, sharerID int64, limit int, offset int, sortBy string, sortOrder string) ([]*models.RichNode, error) {
-	orderByClause := buildOrderByClause(sortBy, sortOrder)
+func (q *Queries) GetRichOutgoingSharedNodes(ctx context.Context, sharerID int64, limit int, offset int, sort string) ([]*models.RichNode, error) {
+	orderByClause := buildOrderByClause(sort)
 
 	query := fmt.Sprintf(`
 		SELECT %s

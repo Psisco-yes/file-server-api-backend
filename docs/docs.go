@@ -241,24 +241,9 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "enum": [
-                            "name",
-                            "size",
-                            "modifiedAt"
-                        ],
                         "type": "string",
-                        "description": "Sort by field (name, size, modifiedAt)",
-                        "name": "sortBy",
-                        "in": "query"
-                    },
-                    {
-                        "enum": [
-                            "asc",
-                            "desc"
-                        ],
-                        "type": "string",
-                        "description": "Sort order (asc, desc)",
-                        "name": "sortOrder",
+                        "description": "Sort order. Comma-separated list of fields. Use '-' for descending. E.g., 'type,-name'",
+                        "name": "sort",
                         "in": "query"
                     }
                 ],
@@ -470,24 +455,9 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "enum": [
-                            "name",
-                            "size",
-                            "modifiedAt"
-                        ],
                         "type": "string",
-                        "description": "Sort by field (name, size, modifiedAt)",
-                        "name": "sortBy",
-                        "in": "query"
-                    },
-                    {
-                        "enum": [
-                            "asc",
-                            "desc"
-                        ],
-                        "type": "string",
-                        "description": "Sort order (asc, desc)",
-                        "name": "sortOrder",
+                        "description": "Sort order. Comma-separated list of fields. Use '-' for descending. E.g., 'type,-name'",
+                        "name": "sort",
                         "in": "query"
                     }
                 ],
@@ -1545,24 +1515,9 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "enum": [
-                            "name",
-                            "size",
-                            "modifiedAt"
-                        ],
                         "type": "string",
-                        "description": "Sort by field (name, size, modifiedAt)",
-                        "name": "sortBy",
-                        "in": "query"
-                    },
-                    {
-                        "enum": [
-                            "asc",
-                            "desc"
-                        ],
-                        "type": "string",
-                        "description": "Sort order (asc, desc)",
-                        "name": "sortOrder",
+                        "description": "Sort order. Comma-separated list of fields. Use '-' for descending. E.g., 'type,-name'",
+                        "name": "sort",
                         "in": "query"
                     }
                 ],
@@ -1765,24 +1720,9 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "enum": [
-                            "name",
-                            "size",
-                            "modifiedAt"
-                        ],
                         "type": "string",
-                        "description": "Sort by field (name, size, modifiedAt)",
-                        "name": "sortBy",
-                        "in": "query"
-                    },
-                    {
-                        "enum": [
-                            "asc",
-                            "desc"
-                        ],
-                        "type": "string",
-                        "description": "Sort order (asc, desc)",
-                        "name": "sortOrder",
+                        "description": "Sort order. Comma-separated list of fields. Use '-' for descending. E.g., 'type,-name'",
+                        "name": "sort",
                         "in": "query"
                     }
                 ],
@@ -1894,24 +1834,9 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "enum": [
-                            "name",
-                            "size",
-                            "modifiedAt"
-                        ],
                         "type": "string",
-                        "description": "Sort by field (name, size, modifiedAt)",
-                        "name": "sortBy",
-                        "in": "query"
-                    },
-                    {
-                        "enum": [
-                            "asc",
-                            "desc"
-                        ],
-                        "type": "string",
-                        "description": "Sort order (asc, desc)",
-                        "name": "sortOrder",
+                        "description": "Sort order. Comma-separated list of fields. Use '-' for descending. E.g., 'type,-name'",
+                        "name": "sort",
                         "in": "query"
                     }
                 ],
@@ -2026,24 +1951,9 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "enum": [
-                            "name",
-                            "size",
-                            "modifiedAt"
-                        ],
                         "type": "string",
-                        "description": "Sort by field (name, size, modifiedAt)",
-                        "name": "sortBy",
-                        "in": "query"
-                    },
-                    {
-                        "enum": [
-                            "asc",
-                            "desc"
-                        ],
-                        "type": "string",
-                        "description": "Sort order (asc, desc)",
-                        "name": "sortOrder",
+                        "description": "Sort order. Comma-separated list of fields. Use '-' for descending. E.g., 'type,-name'",
+                        "name": "sort",
                         "in": "query"
                     }
                 ],
