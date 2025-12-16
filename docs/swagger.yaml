@@ -108,26 +108,23 @@ definitions:
         type: array
       shares:
         items:
-          $ref: '#/definitions/internal_api.OutgoingShareResponse'
+          $ref: '#/definitions/internal_api.ShareDetailResponse'
         type: array
       size_bytes:
         example: 123456
         type: integer
     type: object
-  internal_api.OutgoingShareResponse:
+  internal_api.RefreshTokenRequest:
+    properties:
+      refresh_token:
+        example: V1StGXR8_Z5jdHi6B-myT78q...
+        type: string
+    type: object
+  internal_api.ShareDetailResponse:
     properties:
       id:
         example: 42
         type: integer
-      node_id:
-        example: _vx2a-43VqRT5wz_s9u4
-        type: string
-      node_name:
-        example: Wspólny Projekt
-        type: string
-      node_type:
-        example: folder
-        type: string
       permissions:
         example: write
         type: string
@@ -135,12 +132,6 @@ definitions:
         example: user2
         type: string
       shared_at:
-        type: string
-    type: object
-  internal_api.RefreshTokenRequest:
-    properties:
-      refresh_token:
-        example: V1StGXR8_Z5jdHi6B-myT78q...
         type: string
     type: object
   internal_api.ShareRequest:
@@ -1578,10 +1569,36 @@ paths:
       summary: List users who shared with me
       tags:
       - shares
-  /shares/outgoing:
+  /shares/outgoing/nodes:
     get:
-      description: Gets a list of all items the currently authenticated user has shared
-        with others.
+      description: Gets a paginated and sortable list of unique nodes (files and folders)
+        that the currently authenticated user has shared with others.
+      parameters:
+      - default: 100
+        description: Number of items to return
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset for pagination
+        in: query
+        name: offset
+        type: integer
+      - description: Sort by field (name, size, modifiedAt)
+        enum:
+        - name
+        - size
+        - modifiedAt
+        in: query
+        name: sortBy
+        type: string
+      - description: Sort order (asc, desc)
+        enum:
+        - asc
+        - desc
+        in: query
+        name: sortOrder
+        type: string
       produces:
       - application/json
       responses:
@@ -1589,7 +1606,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/internal_api.OutgoingShareResponse'
+              $ref: '#/definitions/serwer-plikow_internal_models.RichNode'
             type: array
         "401":
           description: Unauthorized
@@ -1601,7 +1618,7 @@ paths:
             type: string
       security:
       - BearerAuth: []
-      summary: List items I have shared
+      summary: List nodes I have shared
       tags:
       - shares
   /trash:

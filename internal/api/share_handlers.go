@@ -221,29 +221,6 @@ func (s *Server) ListSharedNodesHandler(w http.ResponseWriter, r *http.Request) 
 	json.NewEncoder(w).Encode(nodes)
 }
 
-// @Summary      List items I have shared
-// @Description  Gets a list of all items the currently authenticated user has shared with others.
-// @Tags         shares
-// @Produce      json
-// @Security     BearerAuth
-// @Success      200  {array}   OutgoingShareResponse
-// @Failure      401  {string}  string "Unauthorized"
-// @Failure      500  {string}  string "Internal Server Error"
-// @Router       /shares/outgoing [get]
-func (s *Server) ListOutgoingSharesHandler(w http.ResponseWriter, r *http.Request) {
-	claims := GetUserFromContext(r.Context())
-	limit, offset := parsePagination(r)
-
-	shares, err := s.store.GetOutgoingShares(r.Context(), claims.UserID, limit, offset)
-	if err != nil {
-		http.Error(w, "Failed to retrieve outgoing shares", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(shares)
-}
-
 // @Summary      Revoke a share
 // @Description  Revokes a share entry. Only the original sharer can do this.
 // @Tags         shares
@@ -314,4 +291,33 @@ func (s *Server) DeleteShareHandler(w http.ResponseWriter, r *http.Request) {
 	s.wsHub.PublishEvent(claims.UserID, eventBytesSharer)
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// @Summary      List nodes I have shared
+// @Description  Gets a paginated and sortable list of unique nodes (files and folders) that the currently authenticated user has shared with others.
+// @Tags         shares
+// @Produce      json
+// @Security     BearerAuth
+// @Param        limit      query     int     false  "Number of items to return" default(100)
+// @Param        offset     query     int     false  "Offset for pagination" default(0)
+// @Param        sortBy     query     string  false  "Sort by field (name, size, modifiedAt)" enums(name,size,modifiedAt)
+// @Param        sortOrder  query     string  false  "Sort order (asc, desc)" enums(asc,desc)
+// @Success      200  {array}   models.RichNode
+// @Failure      401  {string}  string "Unauthorized"
+// @Failure      500  {string}  string "Internal Server Error"
+// @Router       /shares/outgoing/nodes [get]
+func (s *Server) ListOutgoingSharedNodesHandler(w http.ResponseWriter, r *http.Request) {
+	claims := GetUserFromContext(r.Context())
+	limit, offset := parsePagination(r)
+	sortBy := r.URL.Query().Get("sortBy")
+	sortOrder := r.URL.Query().Get("sortOrder")
+
+	nodes, err := s.store.GetRichOutgoingSharedNodes(r.Context(), claims.UserID, limit, offset, sortBy, sortOrder)
+	if err != nil {
+		http.Error(w, "Failed to retrieve outgoing shared nodes", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(nodes)
 }

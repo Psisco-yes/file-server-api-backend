@@ -129,7 +129,7 @@ func main() {
 			r.Route("/shares", func(r chi.Router) {
 				r.Get("/incoming/users", server.ListSharingUsersHandler)
 				r.Get("/incoming/nodes", server.ListSharedNodesHandler)
-				r.Get("/outgoing", server.ListOutgoingSharesHandler)
+				r.Get("/outgoing/nodes", server.ListOutgoingSharedNodesHandler)
 				r.Delete("/{shareId}", server.DeleteShareHandler)
 			})
 

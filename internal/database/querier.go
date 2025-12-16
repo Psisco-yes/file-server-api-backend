@@ -1648,3 +1648,40 @@ func (q *Queries) DeleteUpload(ctx context.Context, uploadID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, query, uploadID)
 	return err
 }
+
+func (q *Queries) GetRichOutgoingSharedNodes(ctx context.Context, sharerID int64, limit int, offset int, sortBy string, sortOrder string) ([]*models.RichNode, error) {
+	orderByClause := buildOrderByClause(sortBy, sortOrder)
+
+	query := fmt.Sprintf(`
+		SELECT %s
+		FROM nodes n
+		JOIN users u ON n.owner_id = u.id
+		LEFT JOIN user_favorites fav ON n.id = fav.node_id AND fav.user_id = $1
+		WHERE n.id IN (
+			SELECT DISTINCT node_id FROM shares WHERE sharer_id = $1
+		) AND n.deleted_at IS NULL
+		%s
+		LIMIT $2 OFFSET $3
+	`, richNodeFields, orderByClause)
+
+	rows, err := q.db.Query(ctx, query, sharerID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var nodes []*models.RichNode
+	for rows.Next() {
+		node, err := scanRichNode(rows)
+		if err != nil {
+			return nil, err
+		}
+		nodes = append(nodes, node)
+	}
+
+	if nodes == nil {
+		return []*models.RichNode{}, nil
+	}
+
+	return nodes, nil
+}

@@ -1115,7 +1115,7 @@ func (s *Server) GetNodeHandler(w http.ResponseWriter, r *http.Request) {
 	response := NodeDetailResponse{
 		RichNode: *richNode,
 		Path:     path,
-		Shares:   []OutgoingShareResponse{},
+		Shares:   []ShareDetailResponse{},
 	}
 
 	if richNode.Owner.ID == claims.UserID {
@@ -1125,13 +1125,10 @@ func (s *Server) GetNodeHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		apiShares := make([]OutgoingShareResponse, len(dbShares))
+		apiShares := make([]ShareDetailResponse, len(dbShares))
 		for i, dbShare := range dbShares {
-			apiShares[i] = OutgoingShareResponse{
+			apiShares[i] = ShareDetailResponse{
 				ID:                dbShare.ID,
-				NodeID:            dbShare.NodeID,
-				NodeName:          dbShare.NodeName,
-				NodeType:          dbShare.NodeType,
 				RecipientUsername: dbShare.RecipientUsername,
 				Permissions:       dbShare.Permissions,
 				SharedAt:          dbShare.SharedAt,

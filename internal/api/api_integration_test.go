@@ -1772,3 +1772,53 @@ func TestChunkedUpload_Integration(t *testing.T) {
 		require.Contains(t, rrComplete.Body.String(), "upload is incomplete")
 	})
 }
+
+func TestListOutgoingSharedNodesHandler(t *testing.T) {
+	sharer := createTestUserWithPassword(t, "user_outgoing_sharer", "password")
+	recipient1 := createTestUserWithPassword(t, "user_outgoing_rec1", "password")
+	recipient2 := createTestUserWithPassword(t, "user_outgoing_rec2", "password")
+	loginResp := loginUserForTest(t, "user_outgoing_sharer", "password")
+
+	nodeA, _ := createTestNodeAPI(t, "A_Shared_Twice", "file", nil, sharer.ID)
+	nodeZ, _ := createTestNodeAPI(t, "Z_Shared_Once", "file", nil, sharer.ID)
+	createTestNodeAPI(t, "Not_Shared", "file", nil, sharer.ID)
+
+	testServer.store.ShareNode(context.Background(), database.ShareNodeParams{NodeID: nodeA.ID, SharerID: sharer.ID, RecipientID: recipient1.ID, Permissions: "read"})
+	testServer.store.ShareNode(context.Background(), database.ShareNodeParams{NodeID: nodeA.ID, SharerID: sharer.ID, RecipientID: recipient2.ID, Permissions: "read"})
+	testServer.store.ShareNode(context.Background(), database.ShareNodeParams{NodeID: nodeZ.ID, SharerID: sharer.ID, RecipientID: recipient1.ID, Permissions: "read"})
+
+	router := chi.NewRouter()
+	router.Use(testServer.AuthMiddleware)
+	router.Get("/api/v1/shares/outgoing/nodes", testServer.ListOutgoingSharedNodesHandler)
+
+	t.Run("returns unique shared nodes with default sort", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/v1/shares/outgoing/nodes", nil)
+		req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusOK, rr.Code)
+		var nodes []*models.RichNode
+		json.Unmarshal(rr.Body.Bytes(), &nodes)
+
+		require.Len(t, nodes, 2, "Should return 2 unique nodes")
+		require.Equal(t, "A_Shared_Twice", nodes[0].Name)
+		require.Equal(t, "Z_Shared_Once", nodes[1].Name)
+		require.True(t, nodes[0].IsShared)
+	})
+
+	t.Run("returns nodes sorted by name descending", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/v1/shares/outgoing/nodes?sortBy=name&sortOrder=desc", nil)
+		req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusOK, rr.Code)
+		var nodes []*models.RichNode
+		json.Unmarshal(rr.Body.Bytes(), &nodes)
+
+		require.Len(t, nodes, 2)
+		require.Equal(t, "Z_Shared_Once", nodes[0].Name)
+		require.Equal(t, "A_Shared_Twice", nodes[1].Name)
+	})
+}

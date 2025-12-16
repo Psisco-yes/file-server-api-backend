@@ -1863,28 +1863,65 @@ const docTemplate = `{
                 }
             }
         },
-        "/shares/outgoing": {
+        "/shares/outgoing/nodes": {
             "get": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Gets a list of all items the currently authenticated user has shared with others.",
+                "description": "Gets a paginated and sortable list of unique nodes (files and folders) that the currently authenticated user has shared with others.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "shares"
                 ],
-                "summary": "List items I have shared",
+                "summary": "List nodes I have shared",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 100,
+                        "description": "Number of items to return",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 0,
+                        "description": "Offset for pagination",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "name",
+                            "size",
+                            "modifiedAt"
+                        ],
+                        "type": "string",
+                        "description": "Sort by field (name, size, modifiedAt)",
+                        "name": "sortBy",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "description": "Sort order (asc, desc)",
+                        "name": "sortOrder",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/internal_api.OutgoingShareResponse"
+                                "$ref": "#/definitions/serwer-plikow_internal_models.RichNode"
                             }
                         }
                     },
@@ -2309,7 +2346,7 @@ const docTemplate = `{
                 "shares": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/internal_api.OutgoingShareResponse"
+                        "$ref": "#/definitions/internal_api.ShareDetailResponse"
                     }
                 },
                 "size_bytes": {
@@ -2318,24 +2355,21 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_api.OutgoingShareResponse": {
+        "internal_api.RefreshTokenRequest": {
+            "type": "object",
+            "properties": {
+                "refresh_token": {
+                    "type": "string",
+                    "example": "V1StGXR8_Z5jdHi6B-myT78q..."
+                }
+            }
+        },
+        "internal_api.ShareDetailResponse": {
             "type": "object",
             "properties": {
                 "id": {
                     "type": "integer",
                     "example": 42
-                },
-                "node_id": {
-                    "type": "string",
-                    "example": "_vx2a-43VqRT5wz_s9u4"
-                },
-                "node_name": {
-                    "type": "string",
-                    "example": "Wspólny Projekt"
-                },
-                "node_type": {
-                    "type": "string",
-                    "example": "folder"
                 },
                 "permissions": {
                     "type": "string",
@@ -2347,15 +2381,6 @@ const docTemplate = `{
                 },
                 "shared_at": {
                     "type": "string"
-                }
-            }
-        },
-        "internal_api.RefreshTokenRequest": {
-            "type": "object",
-            "properties": {
-                "refresh_token": {
-                    "type": "string",
-                    "example": "V1StGXR8_Z5jdHi6B-myT78q..."
                 }
             }
         },
