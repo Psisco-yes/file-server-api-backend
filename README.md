@@ -8,6 +8,7 @@ W pełni funkcjonalny, REST-owy serwer plików zbudowany w Go, inspirowany syste
 
 -   **Zaawansowane Zarządzanie Plikami:** Pełen zestaw operacji CRUD na plikach i folderach (tworzenie, kopiowanie, listowanie, zmiana nazwy, przenoszenie).
 -   **Obsługa Dużych Plików:** Wsparcie dla przesyłania bardzo dużych plików dzięki mechanizmowi "chunked uploads", z możliwością wznawiania.
+-   **Sortowanie po Stronie Serwera:** Wszystkie endpointy listujące obsługują zaawansowane sortowanie wielokolumnowe (np. `?sort=type,-name`).
 -   **Bezpieczeństwo:**
     *   **Uwierzytelnianie JWT:** Zabezpieczenie oparte na tokenach z rotacją i krótkim czasem życia `access token`.
     *   **Zarządzanie Sesjami:** Możliwość przeglądania i unieważniania aktywnych sesji na różnych urządzeniach.
@@ -24,7 +25,7 @@ W pełni funkcjonalny, REST-owy serwer plików zbudowany w Go, inspirowany syste
 -   **Zarządzanie Zasobami:** Limity miejsca (quotas) na użytkownika.
 -   **Monitoring i Diagnostyka:** Endpointy `/health` i `/metrics` (w formacie Prometheus).
 -   **Dokumentacja API:** Automatycznie generowana i interaktywna dokumentacja Swagger UI.
--   **Pełne Pokrycie Testami:** Wysokie pokrycie kodu testami integracyjnymi (API i baza danych) oraz jednostkowymi.
+-   **Pełne Pokrycie Testami:** Wysokie pokrycie kodu testami integracyjnymi (API i baza danych) oraz jednostkowymi, weryfikującymi wszystkie kluczowe scenariusze.
 
 ## Stack Technologiczny
 
@@ -41,8 +42,8 @@ Ten przewodnik zakłada, że serwer jest uruchamiany lokalnie.
 
 ### Wymagania Wstępne
 
-1.  **Git** (do sklonowania repozytorium)
-2.  **Docker** i **Docker Compose** (do uruchomienia kontenerów)
+1.  **Git**
+2.  **Docker** i **Docker Compose**
 3.  **mkcert** (do wygenerowania lokalnie zaufanych certyfikatów SSL)
 
 ### Kroki Instalacyjne
@@ -59,11 +60,11 @@ Ten przewodnik zakłada, że serwer jest uruchamiany lokalnie.
     - `JWT_SECRET`: Długi, losowy ciąg znaków do podpisywania tokenów JWT.
 
 3.  **Wygeneruj Certyfikaty SSL:**
-    *   Najpierw, jeśli robisz to po raz pierwszy, zainstaluj lokalny urząd certyfikacji `mkcert` (wymaga to uprawnień administratora):
+    *   Zainstaluj lokalny urząd certyfikacji `mkcert`:
         ```bash
         mkcert -install
         ```
-    *   Następnie, w głównym folderze projektu, utwórz folder `certs` i wygeneruj pliki certyfikatu i klucza:
+    *   W głównym folderze projektu, utwórz folder `certs` i wygeneruj pliki:
         ```bash
         mkdir certs
         mkcert -cert-file ./certs/cert.pem -key-file ./certs/key.pem localhost 127.0.0.1 ::1
@@ -80,7 +81,7 @@ Po pomyślnym uruchomieniu:
 - Dokumentacja API Swaggera jest dostępna pod adresem `https://localhost/swagger/index.html`.
 
 ### Domyślne Konta
-Po pierwszym uruchomieniu, w systemie dostępne są domyślne konta do testowania (zgodnie z `db/init.sql`):
+Dostępne są domyślne konta do testowania (zgodnie z `db/init.sql`):
 - **Użytkownik:** `admin`, **Hasło:** `admin`
 - **Użytkownik:** `user`, **Hasło:** `user`
 
@@ -99,27 +100,26 @@ Zamiast budować i ręcznie synchronizować skomplikowany, pełny stan systemu p
     *   Nawiąż połączenie **WebSocket** (`wss://.../api/v1/ws?token=<token>`), aby nasłuchiwać na zmiany w czasie rzeczywistym.
 
 2.  **Działanie Aplikacji:**
-    *   Każdy widok (np. zawartość folderu) pobiera swoje dane bezpośrednio z odpowiedniego endpointu (np. `GET /api/v1/nodes?parent_id=...`). Odpowiedź z tego zapytania jest cachowana po stronie klienta (np. w pamięci).
-    *   Gdy użytkownik wykonuje akcję (np. tworzy folder), aplikacja wysyła request do API (`POST /nodes/folder`), ale **nie modyfikuje swojego stanu od razu**. Jest to podejście optymistyczne, gdzie UI może tymczasowo pokazać zmianę, ale ostateczne potwierdzenie nadejdzie z serwera.
-    *   Gdy serwer prześle wiadomość przez WebSocket (np. `node_created` lub `node_updated`), klient identyfikuje, którego widoku dotyczyła zmiana (np. na podstawie `parent_id` w payloadzie zdarzenia). Następnie **unieważnia cache** dla tego konkretnego widoku i żąda odświeżenia danych, ponownie wywołując odpowiedni endpoint (np. `GET /api/v1/nodes?parent_id=...`).
-    *   Takie podejście drastycznie upraszcza logikę klienta i utrzymuje backend jako jedyne i ostateczne "źródło prawdy" (Source of Truth).
+    *   Każdy widok (np. zawartość folderu) pobiera swoje dane z odpowiedniego endpointu (np. `GET /api/v1/nodes?parent_id=...`). Odpowiedź z tego zapytania jest cachowana po stronie klienta.
+    *   Gdy serwer prześle wiadomość przez WebSocket (np. `node_created`), klient identyfikuje, którego widoku dotyczyła zmiana i **unieważnia cache** dla tego konkretnego zapytania, co powoduje automatyczne pobranie świeżych danych w tle.
+    *   To podejście drastycznie upraszcza kod frontendu i czyni backend jedynym "źródłem prawdy" (Source of Truth).
 
 3.  **Synchronizacja po Powrocie Online:**
-    *   Po odzyskaniu połączenia z internetem, klient powinien odświeżyć wszystkie aktywne, widoczne dla użytkownika dane.
-    *   Dodatkowo, aby zsynchronizować zmiany, które nastąpiły w tle (np. w folderach, których użytkownik aktualnie nie przegląda), można użyć endpointu `GET /api/v1/events?since=<last_known_event_id>`. Przetwarzając zwrócone zdarzenia, klient może selektywnie unieważnić i odświeżyć te części swojego cache'u, które stały się nieaktualne.
+    *   Po odzyskaniu połączenia, klient powinien odświeżyć wszystkie aktywne, widoczne dla użytkownika dane.
+    *   Dodatkowo, można użyć `GET /api/v1/events?since=<last_known_event_id>`, aby zsynchronizować zmiany, które nastąpiły w tle.
 
 ### Zarządzanie Tokenami
 
--   **Access Token (15 minut):** Używaj go do wszystkich zapytań API. Zaleca się jego proaktywne odświeżanie (np. co 10-14 minut), nie czekając na błąd `401 Unauthorized`.
--   **Refresh Token (24 godziny):** Służy wyłącznie do uzyskiwania nowego `access token` za pomocą endpointu `/auth/refresh`. Po każdym użyciu, serwer zwraca **nowy** `refresh token`, który należy zapisać, ponieważ stary zostaje unieważniony.
--   **Wylogowanie:** Po wywołaniu `DELETE /sessions/...` lub `POST /sessions/terminate_all`, klient **musi** usunąć oba tokeny ze swojej pamięci, aby zakończyć sesję.
+-   **Access Token (15 minut):** Używaj go do wszystkich zapytań API. Zaleca się jego proaktywne odświeżanie.
+-   **Refresh Token (24 godziny):** Służy wyłącznie do uzyskiwania nowego `access token`. Po każdym użyciu endpointu `/auth/refresh` otrzymasz **nowy** `refresh token`, który należy zapisać.
+-   **Wylogowanie:** Po wywołaniu `DELETE /sessions/...` lub `POST /sessions/terminate_all`, klient **musi** usunąć oba tokeny ze swojej pamięci.
 
 ### Przesyłanie Plików (Chunked Upload)
 
 Aby wgrać duży plik, użyj następującego przepływu:
 
 1.  **Inicjacja:** Wyślij `POST /api/v1/nodes/upload/initiate` z metadanymi pliku (`name`, `size`, `parent_id`). W odpowiedzi otrzymasz `upload_id`.
-2.  **Przesyłanie:** Podziel plik na części ("chunki", np. po 5 MB). Wysyłaj każdą część za pomocą `PATCH /api/v1/nodes/upload/{uploadId}`, dodając nagłówek `Content-Range` (np. `bytes 0-5242879/20000000`).
+2.  **Przesyłanie:** Podziel plik na części ("chunki"). Wysyłaj każdą część za pomocą `PATCH /api/v1/nodes/upload/{uploadId}`, dodając nagłówek `Content-Range` (np. `bytes 0-5242879/20000000`).
 3.  **Finalizacja:** Po wgraniu ostatniej części, wyślij `POST /api/v1/nodes/upload/{uploadId}/complete`, aby zakończyć proces. W odpowiedzi otrzymasz pełny obiekt `RichNode` nowo utworzonego pliku.
 
 Dla małych plików (np. < 100MB), nadal można używać prostszego endpointu `POST /api/v1/nodes/file`.
@@ -192,6 +192,17 @@ Wyświetla ogólne statystyki serwera.
 
 Wszystkie ścieżki są poprzedzone `/api/v1`. Wszystkie chronione endpointy wymagają nagłówka `Authorization: Bearer <access_token>`.
 
+**Ważne informacje o odpowiedziach:**
+*   Większość endpointów zwraca obiekt `RichNode`, który zawiera pole `permissions`. Może ono przyjąć wartości:
+    *   `"owner"`: Jesteś właścicielem tego zasobu.
+    *   `"write"`: Masz uprawnienia do zapisu (odziedziczone z udostępnienia).
+    *   `"read"`: Masz uprawnienia tylko do odczytu.
+    *   `null` (pole nieobecne): Nie jesteś właścicielem i zasób nie jest Ci udostępniony.
+*   Wszystkie endpointy listujące obsługują paginację (`?limit=...&offset=...`) oraz sortowanie.
+
+**Sortowanie:** Użyj parametru `?sort=...`, który przyjmuje listę pól oddzielonych przecinkami. Użyj prefiksu `-` dla sortowania malejącego. Dostępne pola: `name`, `size`, `modifiedAt`, `type`.
+*Przykład: `?sort=type,-name` (sortuj po typie rosnąco, potem po nazwie malejąco).*
+
 ### Autentykacja i Sesje
 - `POST /auth/login`: Logowanie.
 - `POST /auth/refresh`: Odświeżanie tokena.
@@ -253,8 +264,6 @@ Serwer wykorzystuje WebSockets do natychmiastowego powiadamiania podłączonych 
 - **Endpoint:** `GET /api/v1/ws` (protokół `wss://` dla HTTPS)
 - **URL Połączenia:** `wss://localhost/api/v1/ws?token=<access_token>`
 
-Uwierzytelnienie odbywa się poprzez przekazanie ważnego tokena dostępowego (JWT) jako parametru zapytania.
-
 ### Format Komunikatów
 
 Komunikaty są wysyłane w formacie JSON i mają następującą strukturę:
@@ -287,5 +296,4 @@ Komunikaty są wysyłane w formacie JSON i mają następującą strukturę:
 
 -   **Wysokie zużycie RAM przy archiwizacji:** Mechanizm tworzenia archiwum ZIP może być nieefektywny przy bardzo dużych strukturach folderów i mógłby zostać zoptymalizowany (streaming).
 -   **Natychmiastowe unieważnianie tokenów (Blacklisting):** Obecnie `access token` jest ważny do momentu naturalnego wygaśnięcia. W przyszłości można zaimplementować mechanizm "czarnej listy" do natychmiastowego unieważniania tokenów po wylogowaniu.
--   **Filtrowanie i Sortowanie Wyników:** Rozbudowa istniejących endpointów listujących o zaawansowane opcje filtrowania (np. po typie pliku, dacie).
 -   **Dziennik Audytowy (Audit Log):** Stworzenie oddzielnego, niezmiennego dziennika zdarzeń krytycznych dla bezpieczeństwa i administracji.
