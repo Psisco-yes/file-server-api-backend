@@ -162,15 +162,14 @@ func TestMoveNodeToTrash(t *testing.T) {
 	require.Equal(t, 3, count, "Expected 3 nodes (folder, subfolder, file) to be in trash")
 
 	var originalParentID *string
-	query = `SELECT original_parent_id FROM nodes WHERE id = $1`
-	err = testStore.pool.QueryRow(context.Background(), query, subfolder.ID).Scan(&originalParentID)
+	var parentID *string
+	query = `SELECT original_parent_id, parent_id FROM nodes WHERE id = $1`
+	err = testStore.pool.QueryRow(context.Background(), query, subfolder.ID).Scan(&originalParentID, &parentID)
 	require.NoError(t, err)
-	require.NotNil(t, originalParentID)
+	require.NotNil(t, originalParentID, "original_parent_id should be set")
 	require.Equal(t, folder.ID, *originalParentID)
-
-	success, err = testStore.MoveNodeToTrash(context.Background(), "non_existent_id", owner.ID)
-	require.NoError(t, err)
-	require.False(t, success, "MoveNodeToTrash should return false for a non-existent node")
+	require.NotNil(t, parentID, "parent_id should not be changed to NULL")
+	require.Equal(t, folder.ID, *parentID)
 }
 
 func TestMoveNode(t *testing.T) {

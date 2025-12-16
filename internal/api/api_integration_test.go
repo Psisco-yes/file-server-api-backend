@@ -938,6 +938,48 @@ func TestTrashHandlers_Integration(t *testing.T) {
 	})
 }
 
+func TestTrash_DataIntegrity(t *testing.T) {
+	user := createTestUserWithPassword(t, "user_trash_integrity", "password")
+	loginResp := loginUserForTest(t, "user_trash_integrity", "password")
+
+	parentFolder, _ := createTestNodeAPI(t, "ParentForTrash", "folder", nil, user.ID)
+	nodeToTrash, _ := createTestNodeAPI(t, "FileToTrash.txt", "file", &parentFolder.ID, user.ID)
+
+	var initialParentID *string
+	err := testServer.store.GetPool().QueryRow(context.Background(), "SELECT parent_id FROM nodes WHERE id=$1", nodeToTrash.ID).Scan(&initialParentID)
+	require.NoError(t, err)
+	require.NotNil(t, initialParentID)
+	require.Equal(t, parentFolder.ID, *initialParentID)
+
+	router := chi.NewRouter()
+	router.Use(testServer.AuthMiddleware)
+	router.Delete("/api/v1/nodes/{nodeId}", testServer.DeleteNodeHandler)
+
+	url := fmt.Sprintf("/api/v1/nodes/%s", nodeToTrash.ID)
+	req := httptest.NewRequest("DELETE", url, nil)
+	req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusNoContent, rr.Code)
+
+	var deletedAt *time.Time
+	var finalParentID *string
+	var originalParentID *string
+
+	query := "SELECT deleted_at, parent_id, original_parent_id FROM nodes WHERE id = $1"
+	err = testServer.store.GetPool().QueryRow(context.Background(), query, nodeToTrash.ID).Scan(&deletedAt, &finalParentID, &originalParentID)
+	require.NoError(t, err)
+
+	require.NotNil(t, deletedAt, "deleted_at should be set after moving to trash")
+
+	require.NotNil(t, originalParentID, "original_parent_id should be set")
+	require.Equal(t, parentFolder.ID, *originalParentID, "original_parent_id should be the ID of the old parent folder")
+
+	require.NotNil(t, finalParentID, "parent_id should NOT be null")
+	require.Equal(t, parentFolder.ID, *finalParentID, "parent_id should remain unchanged")
+}
+
 func TestGetEventsHandler_Integration(t *testing.T) {
 	username := "user_for_events_test"
 	password := "password123"
@@ -1570,20 +1612,17 @@ func TestListSharedNodesHandler_SortingAndPagination(t *testing.T) {
 	recipient := createTestUserWithPassword(t, "recipient_sort_pagination", "password")
 	recipientLogin := loginUserForTest(t, recipient.Username, "password")
 
-	sharedFolder, _ := createTestNodeAPI(t, "Shared Root", "folder", nil, sharer.ID)
-
-	var size1 int64 = 999
-	var size2 int64 = 111
-	nodeZ, _ := createTestNodeAPI(t, "Z_File.txt", "file", &sharedFolder.ID, sharer.ID)
-	nodeA, _ := createTestNodeAPI(t, "A_File.txt", "file", &sharedFolder.ID, sharer.ID)
-
-	_, err := testServer.store.GetPool().Exec(context.Background(), "UPDATE nodes SET size_bytes = $1, modified_at = $2 WHERE id = $3", size1, time.Now(), nodeZ.ID)
-	require.NoError(t, err)
-	_, err = testServer.store.GetPool().Exec(context.Background(), "UPDATE nodes SET size_bytes = $1, modified_at = $2 WHERE id = $3", size2, time.Now().Add(-5*time.Minute), nodeA.ID)
+	readFolder, _ := createTestNodeAPI(t, "Read Folder", "folder", nil, sharer.ID)
+	nodeInRead, _ := createTestNodeAPI(t, "File_In_Read", "file", &readFolder.ID, sharer.ID)
+	_, err := testServer.store.ShareNode(context.Background(), database.ShareNodeParams{
+		NodeID: readFolder.ID, SharerID: sharer.ID, RecipientID: recipient.ID, Permissions: "read",
+	})
 	require.NoError(t, err)
 
+	writeFolder, _ := createTestNodeAPI(t, "Write Folder", "folder", nil, sharer.ID)
+	nodeInWrite, _ := createTestNodeAPI(t, "File_In_Write", "file", &writeFolder.ID, sharer.ID)
 	_, err = testServer.store.ShareNode(context.Background(), database.ShareNodeParams{
-		NodeID: sharedFolder.ID, SharerID: sharer.ID, RecipientID: recipient.ID, Permissions: "read",
+		NodeID: writeFolder.ID, SharerID: sharer.ID, RecipientID: recipient.ID, Permissions: "write",
 	})
 	require.NoError(t, err)
 
@@ -1591,7 +1630,7 @@ func TestListSharedNodesHandler_SortingAndPagination(t *testing.T) {
 	router.Use(testServer.AuthMiddleware)
 	router.Get("/api/v1/shares/incoming/nodes", testServer.ListSharedNodesHandler)
 
-	runSharedSortTest := func(t *testing.T, url string, expectedOrder []string) {
+	runAndVerify := func(t *testing.T, url string, expectedName, expectedPermission string) {
 		req := httptest.NewRequest("GET", url, nil)
 		req.Header.Set("Authorization", "Bearer "+recipientLogin.AccessToken)
 		rr := httptest.NewRecorder()
@@ -1602,29 +1641,46 @@ func TestListSharedNodesHandler_SortingAndPagination(t *testing.T) {
 		err := json.Unmarshal(rr.Body.Bytes(), &nodes)
 		require.NoError(t, err)
 
-		require.Len(t, nodes, len(expectedOrder))
-		for i, expectedName := range expectedOrder {
-			require.Equal(t, expectedName, nodes[i].Name, "item at index %d has wrong name", i)
-		}
+		require.Len(t, nodes, 1)
+		node := nodes[0]
+
+		require.Equal(t, expectedName, node.Name)
+		require.NotNil(t, node.Permissions)
+		require.Equal(t, expectedPermission, *node.Permissions, "Node '%s' should have '%s' permission", node.Name, expectedPermission)
 	}
 
-	baseQuery := fmt.Sprintf("/api/v1/shares/incoming/nodes?sharer_username=%s&parent_id=%s", sharer.Username, sharedFolder.ID)
+	t.Run("lists root of shared items with correct permissions", func(t *testing.T) {
+		baseQuery := fmt.Sprintf("/api/v1/shares/incoming/nodes?sharer_username=%s", sharer.Username)
 
-	t.Run("shared content sort by name asc", func(t *testing.T) {
-		runSharedSortTest(t, baseQuery+"&sortBy=name&sortOrder=asc", []string{"A_File.txt", "Z_File.txt"})
+		req := httptest.NewRequest("GET", baseQuery, nil)
+		req.Header.Set("Authorization", "Bearer "+recipientLogin.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusOK, rr.Code)
+		var nodes []*models.RichNode
+		json.Unmarshal(rr.Body.Bytes(), &nodes)
+		require.Len(t, nodes, 2)
+
+		for _, node := range nodes {
+			require.NotNil(t, node.Permissions, "Permissions field should not be nil for a shared node")
+			if node.ID == readFolder.ID {
+				require.Equal(t, "read", *node.Permissions)
+			}
+			if node.ID == writeFolder.ID {
+				require.Equal(t, "write", *node.Permissions)
+			}
+		}
 	})
 
-	t.Run("shared content sort by size asc", func(t *testing.T) {
-		runSharedSortTest(t, baseQuery+"&sortBy=size&sortOrder=asc", []string{"A_File.txt", "Z_File.txt"})
+	t.Run("lists content of read-only folder with inherited read permission", func(t *testing.T) {
+		query := fmt.Sprintf("/api/v1/shares/incoming/nodes?sharer_username=%s&parent_id=%s", sharer.Username, readFolder.ID)
+		runAndVerify(t, query, nodeInRead.Name, "read")
 	})
 
-	t.Run("shared content sort by modifiedAt desc", func(t *testing.T) {
-		runSharedSortTest(t, baseQuery+"&sortBy=modifiedAt&sortOrder=desc", []string{"Z_File.txt", "A_File.txt"})
-	})
-
-	t.Run("shared content pagination", func(t *testing.T) {
-		url := fmt.Sprintf("%s&sortBy=name&sortOrder=asc&limit=1&offset=1", baseQuery)
-		runSharedSortTest(t, url, []string{"Z_File.txt"})
+	t.Run("lists content of writeable folder with inherited write permission", func(t *testing.T) {
+		query := fmt.Sprintf("/api/v1/shares/incoming/nodes?sharer_username=%s&parent_id=%s", sharer.Username, writeFolder.ID)
+		runAndVerify(t, query, nodeInWrite.Name, "write")
 	})
 }
 

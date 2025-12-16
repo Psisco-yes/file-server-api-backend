@@ -106,6 +106,8 @@ definitions:
         items:
           $ref: '#/definitions/serwer-plikow_internal_models.RichNode'
         type: array
+      permissions:
+        type: string
       shares:
         items:
           $ref: '#/definitions/internal_api.ShareDetailResponse'
@@ -232,6 +234,8 @@ definitions:
         $ref: '#/definitions/serwer-plikow_internal_models.RichNodeOwner'
       parent_id:
         example: fLW5kAh2ia9vYmjMnU4nZ
+        type: string
+      permissions:
         type: string
       size_bytes:
         example: 123456

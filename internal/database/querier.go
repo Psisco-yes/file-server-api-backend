@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1247,20 +1248,42 @@ const richNodeFields = `
     n.id, n.parent_id, n.original_parent_id, n.name, n.node_type, n.size_bytes, n.mime_type, n.created_at, n.modified_at,
     n.owner_id, u.username, u.display_name,
     (CASE WHEN fav.user_id IS NOT NULL THEN TRUE ELSE FALSE END) as is_favorited,
-    EXISTS (SELECT 1 FROM shares s WHERE s.node_id = n.id) as is_shared
+    EXISTS (SELECT 1 FROM shares s WHERE s.node_id = n.id) as is_shared,
+    CASE
+        WHEN n.owner_id = $1 THEN 'owner'
+        ELSE (
+            SELECT s.permissions FROM shares s
+            WHERE s.recipient_id = $1 AND s.node_id IN (
+                WITH RECURSIVE node_and_ancestors AS (
+                    SELECT id, parent_id FROM nodes WHERE id = n.id
+                    UNION ALL
+                    SELECT an.id, an.parent_id FROM nodes an JOIN node_and_ancestors naa ON an.id = naa.parent_id
+                ) SELECT id FROM node_and_ancestors
+            )
+            ORDER BY (s.permissions = 'write') DESC
+            LIMIT 1
+        )
+    END as permissions
 `
 
 func scanRichNode(rows pgx.Rows) (*models.RichNode, error) {
 	var node models.RichNode
+	var permissions sql.NullString
+
 	err := rows.Scan(
 		&node.ID, &node.ParentID, &node.OriginalParentID, &node.Name, &node.NodeType, &node.SizeBytes, &node.MimeType, &node.CreatedAt, &node.ModifiedAt,
 		&node.Owner.ID, &node.Owner.Username, &node.Owner.DisplayName,
 		&node.IsFavorited,
 		&node.IsShared,
+		&permissions,
 	)
 	if err != nil {
 		return nil, err
 	}
+	if permissions.Valid {
+		node.Permissions = &permissions.String
+	}
+
 	return &node, nil
 }
 
@@ -1274,11 +1297,11 @@ func (q *Queries) GetRichNodeIfAccessible(ctx context.Context, nodeID string, us
         SELECT %s
         FROM nodes n
         JOIN users u ON n.owner_id = u.id
-        LEFT JOIN user_favorites fav ON n.id = fav.node_id AND fav.user_id = $2
-        WHERE n.id = $1 AND n.deleted_at IS NULL
+        LEFT JOIN user_favorites fav ON n.id = fav.node_id AND fav.user_id = $1
+        WHERE n.id = $2 AND n.deleted_at IS NULL
     `, richNodeFields)
 
-	rows, err := q.db.Query(ctx, query, nodeID, userID)
+	rows, err := q.db.Query(ctx, query, userID, nodeID)
 	if err != nil {
 		return nil, err
 	}
@@ -1341,18 +1364,18 @@ func (q *Queries) GetRichNodesByParentID(ctx context.Context, ownerID int64, req
 func (q *Queries) GetRichNodePath(ctx context.Context, nodeID string, requesterID int64) ([]*models.RichNode, error) {
 	query := fmt.Sprintf(`
 		WITH RECURSIVE node_path AS (
-			SELECT * FROM nodes WHERE id = (SELECT parent_id FROM nodes WHERE id = $1)
+			SELECT * FROM nodes WHERE id = (SELECT parent_id FROM nodes WHERE id = $2)
 			UNION ALL
 			SELECT n.* FROM nodes n JOIN node_path np ON n.id = np.parent_id
 		)
 		SELECT %s
 		FROM node_path n
 		JOIN users u ON n.owner_id = u.id
-		LEFT JOIN user_favorites fav ON n.id = fav.node_id AND fav.user_id = $2
+		LEFT JOIN user_favorites fav ON n.id = fav.node_id AND fav.user_id = $1
 		WHERE n.deleted_at IS NULL;
 	`, richNodeFields)
 
-	rows, err := q.db.Query(ctx, query, nodeID, requesterID)
+	rows, err := q.db.Query(ctx, query, requesterID, nodeID)
 	if err != nil {
 		return nil, err
 	}

@@ -2343,6 +2343,9 @@ const docTemplate = `{
                         "$ref": "#/definitions/serwer-plikow_internal_models.RichNode"
                     }
                 },
+                "permissions": {
+                    "type": "string"
+                },
                 "shares": {
                     "type": "array",
                     "items": {
@@ -2523,6 +2526,9 @@ const docTemplate = `{
                 "parent_id": {
                     "type": "string",
                     "example": "fLW5kAh2ia9vYmjMnU4nZ"
+                },
+                "permissions": {
+                    "type": "string"
                 },
                 "size_bytes": {
                     "type": "integer",

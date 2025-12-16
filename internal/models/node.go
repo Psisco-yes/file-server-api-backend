@@ -35,4 +35,5 @@ type RichNode struct {
 	Owner            RichNodeOwner `json:"owner"`
 	IsFavorited      bool          `json:"is_favorited" example:"true"`
 	IsShared         bool          `json:"is_shared" example:"false"`
+	Permissions      *string       `json:"permissions,omitempty"`
 }
