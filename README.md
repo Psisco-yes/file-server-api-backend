@@ -30,9 +30,9 @@ W pełni funkcjonalny, REST-owy serwer plików zbudowany w Go, inspirowany syste
 
 ## Stack Technologiczny
 
--   **Backend:** Go (Golang)
--   **Baza Danych:** PostgreSQL
--   **Reverse Proxy (HTTPS):** Caddy
+-   **Backend:** Go (Golang) 1.25.5
+-   **Baza Danych:** PostgreSQL 17
+-   **Reverse Proxy (HTTPS):** Caddy 2.10.2
 -   **Konteneryzacja:** Docker & Docker Compose
 -   **Testowanie:** `testcontainers-go`, `testify`
 -   **Dokumentacja:** `swaggo`
@@ -94,7 +94,7 @@ Aby zapewnić wydajne i responsywne działanie, aplikacja kliencka powinna stoso
 
 ### Architektura: "Inteligentny Klient" z Odświeżaniem Danych
 
-Zamiast budować i ręcznie synchronizować skomplikowany, pełny stan systemu plików po stronie klienta, zaleca się podejście "Inteligentnego Klienta" (Smart Client). Opiera się ono na cachowaniu poszczególnych zapytań API i inteligentnym ich odświeżaniu w odpowiedzi na zdarzenia z serwera.
+Zaleca się podejście "Inteligentnego Klienta" (Smart Client), które opiera się na cachowaniu poszczególnych zapytań API i inteligentnym ich odświeżaniu w odpowiedzi na zdarzenia z serwera.
 
 1.  **Start Aplikacji:**
     *   Pobierz podstawowe dane, np. `GET /api/v1/me`, aby uzyskać informacje o zalogowanym użytkowniku.
@@ -187,6 +187,16 @@ Wyświetla ogólne statystyki serwera.
 .\system-stats.ps1
 ```
 
+### Przykłady Użycia
+
+-   **Dodaj użytkownika:** `.\scripts\add-user.ps1 -Username "nowyuser" -Password "SuperT@jneHaslo1"`
+-   **Usuń użytkownika:** `.\scripts\delete-user.ps1 -Username "nowyuser"`
+-   **Zmień limit miejsca:** `.\scripts\change-quota.ps1 -Username "nowyuser" -QuotaGB 25`
+-   **Resetuj hasło:** `.\scripts\reset-password.ps1 -Username "nowyuser" -NewPassword "NoweLepszeHaslo_456"`
+-   **Listuj użytkowników:** `.\scripts\list-users.ps1`
+-   **Wyloguj użytkownika:** `.\scripts\terminate-sessions.ps1 -Username "nowyuser"`
+-   **Pokaż statystyki:** `.\scripts\system-stats.ps1`
+
 ---
 
 ## Przegląd API Endpoints
@@ -237,6 +247,7 @@ Wszystkie ścieżki są poprzedzone `/api/v1`. Wszystkie chronione endpointy wym
 - `POST /nodes/{nodeId}/share`: Udostępnij plik/folder.
 - `GET /shares/incoming/users`: Listuj, kto mi udostępnił.
 - `GET /shares/incoming/nodes`: Przeglądaj, co mi udostępniono.
+- `GET /shares/incoming/writeable-folders`: Przeglądaj foldery z prawem do zapisu.
 - `GET /shares/outgoing/nodes`: Listuj unikalne pliki/foldery, które ja udostępniłem.
 - `DELETE /shares/{shareId}`: Cofnij udostępnienie.
 
