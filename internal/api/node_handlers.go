@@ -54,6 +54,7 @@ func (s *Server) generateUniqueID(ctx context.Context) (string, error) {
 // @Failure      403            {string}  string "Forbidden - Write permission denied"
 // @Failure      404            {string}  string "Not Found - Parent folder not found"
 // @Failure      409            {string}  string "Conflict - a folder with the same name already exists"
+// @Failure      429            {string}  string "Too Many Requests"
 // @Failure      500            {string}  string "Internal Server Error"
 // @Router       /nodes/folder [post]
 func (s *Server) CreateFolderHandler(w http.ResponseWriter, r *http.Request) {
@@ -171,6 +172,7 @@ func (s *Server) CreateFolderHandler(w http.ResponseWriter, r *http.Request) {
 // @Param        sort       query     string  false  "Sort order. Comma-separated list of fields. Use '-' for descending. E.g., 'type,-name'"
 // @Success      200        {array}   models.RichNode
 // @Failure      401        {string}  string "Unauthorized"
+// @Failure      429        {string}  string "Too Many Requests"
 // @Failure      500        {string}  string "Internal Server Error"
 // @Router       /nodes [get]
 func (s *Server) ListNodesHandler(w http.ResponseWriter, r *http.Request) {
@@ -210,6 +212,7 @@ func (s *Server) ListNodesHandler(w http.ResponseWriter, r *http.Request) {
 // @Failure      403        {string}  string "Forbidden - Write permission denied"
 // @Failure      404        {string}  string "Not Found - Parent folder not found"
 // @Failure      413        {string}  string "Payload Too Large - either the request exceeds 1GB or the owner's storage quota is exceeded."
+// @Failure      429        {string}  string "Too Many Requests"
 // @Failure      500        {string}  string "Internal Server Error"
 // @Router       /nodes/file [post]
 func (s *Server) UploadFileHandler(w http.ResponseWriter, r *http.Request) {
@@ -386,6 +389,7 @@ func (s *Server) UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 // @Failure      400      {string}  string "Bad Request - Cannot download a folder"
 // @Failure      401      {string}  string "Unauthorized"
 // @Failure      404      {string}  string "Not Found"
+// @Failure      429      {string}  string "Too Many Requests"
 // @Failure      500      {string}  string "Internal Server Error"
 // @Router       /nodes/{nodeId}/download [get]
 func (s *Server) DownloadFileHandler(w http.ResponseWriter, r *http.Request) {
@@ -441,6 +445,7 @@ func (s *Server) DownloadFileHandler(w http.ResponseWriter, r *http.Request) {
 // @Failure      401      {string}  string "Unauthorized"
 // @Failure      403      {string}  string "Forbidden - Write permission denied"
 // @Failure      404      {string}  string "Not Found"
+// @Failure      429      {string}  string "Too Many Requests"
 // @Failure      500      {string}  string "Internal Server Error"
 // @Router       /nodes/{nodeId} [delete]
 func (s *Server) DeleteNodeHandler(w http.ResponseWriter, r *http.Request) {
@@ -537,6 +542,7 @@ func (s *Server) DeleteNodeHandler(w http.ResponseWriter, r *http.Request) {
 // @Failure      403            {string}  string "Forbidden - Write permission denied"
 // @Failure      404            {string}  string "Not Found"
 // @Failure      409            {string}  string "Conflict"
+// @Failure      429            {string}  string "Too Many Requests"
 // @Failure      500            {string}  string "Internal Server Error"
 // @Router       /nodes/{nodeId} [patch]
 func (s *Server) UpdateNodeHandler(w http.ResponseWriter, r *http.Request) {
@@ -749,6 +755,7 @@ func (s *Server) UpdateNodeHandler(w http.ResponseWriter, r *http.Request) {
 // @Failure      400    {string}  string "Bad Request"
 // @Failure      401    {string}  string "Unauthorized"
 // @Failure      404    {string}  string "Not Found - one of the nodes does not exist"
+// @Failure      429    {string}  string "Too Many Requests"
 // @Failure      500    {string}  string "Internal Server Error"
 // @Router       /nodes/archive [get]
 func (s *Server) DownloadArchiveHandler(w http.ResponseWriter, r *http.Request) {
@@ -847,6 +854,7 @@ func (s *Server) DownloadArchiveHandler(w http.ResponseWriter, r *http.Request) 
 // @Failure      404           {string}  string "Not Found - Source or destination not found"
 // @Failure      409           {string}  string "Conflict - A node with the same name already exists in the target location"
 // @Failure      413           {string}  string "Payload Too Large - Not enough storage space"
+// @Failure      429           {string}  string "Too Many Requests"
 // @Failure      500           {string}  string "Internal Server Error"
 // @Router       /nodes/{nodeId}/copy [post]
 func (s *Server) CopyNodeHandler(w http.ResponseWriter, r *http.Request) {
@@ -1074,6 +1082,7 @@ func (s *Server) CopyNodeHandler(w http.ResponseWriter, r *http.Request) {
 // @Success      200      {object}  NodeDetailResponse
 // @Failure      401      {string}  string "Unauthorized"
 // @Failure      404      {string}  string "Not Found"
+// @Failure      429      {string}  string "Too Many Requests"
 // @Failure      500      {string}  string "Internal Server Error"
 // @Router       /nodes/{nodeId} [get]
 func (s *Server) GetNodeHandler(w http.ResponseWriter, r *http.Request) {

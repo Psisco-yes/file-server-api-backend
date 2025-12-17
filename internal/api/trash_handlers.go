@@ -18,6 +18,7 @@ import (
 // @Security     BearerAuth
 // @Success      204  {null}    nil "No Content"
 // @Failure      401  {string}  string "Unauthorized"
+// @Failure      429  {string}  string "Too Many Requests"
 // @Failure      500  {string}  string "Internal Server Error"
 // @Router       /trash/purge [delete]
 func (s *Server) PurgeTrashHandler(w http.ResponseWriter, r *http.Request) {
@@ -64,6 +65,7 @@ func (s *Server) PurgeTrashHandler(w http.ResponseWriter, r *http.Request) {
 // @Param        sort       query     string  false  "Sort order. Comma-separated list of fields. Use '-' for descending. E.g., 'type,-name'"
 // @Success      200  {array}   models.RichNode
 // @Failure      401  {string}  string "Unauthorized"
+// @Failure      429  {string}  string "Too Many Requests"
 // @Failure      500  {string}  string "Internal Server Error"
 // @Router       /trash [get]
 func (s *Server) ListTrashHandler(w http.ResponseWriter, r *http.Request) {
@@ -92,6 +94,7 @@ func (s *Server) ListTrashHandler(w http.ResponseWriter, r *http.Request) {
 // @Failure      401      {string}  string "Unauthorized"
 // @Failure      404      {string}  string "Not Found"
 // @Failure      409      {string}  string "Conflict - a node with the same name already exists in the original location"
+// @Failure      429      {string}  string "Too Many Requests"
 // @Failure      500      {string}  string "Internal Server Error"
 // @Router       /nodes/{nodeId}/restore [post]
 func (s *Server) RestoreNodeHandler(w http.ResponseWriter, r *http.Request) {
@@ -175,6 +178,7 @@ func (s *Server) RestoreNodeHandler(w http.ResponseWriter, r *http.Request) {
 // @Success      204      {null}    nil     "No Content"
 // @Failure      401      {string}  string  "Unauthorized"
 // @Failure      404      {string}  string  "Not Found - Node not found in trash"
+// @Failure      429      {string}  string "Too Many Requests"
 // @Failure      500      {string}  string  "Internal Server Error"
 // @Router       /trash/{nodeId} [delete]
 func (s *Server) PurgeSingleNodeHandler(w http.ResponseWriter, r *http.Request) {

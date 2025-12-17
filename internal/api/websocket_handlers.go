@@ -21,6 +21,7 @@ var upgrader = ws.Upgrader{
 // @Param        token  query     string  true  "JWT Access Token"
 // @Success      101    {string}  string  "Switching Protocols"
 // @Failure      401    {string}  string  "Unauthorized - Invalid or missing token"
+// @Failure      429    {string}  string "Too Many Requests"
 // @Router       /ws [get]
 func (s *Server) ServeWsHandler(w http.ResponseWriter, r *http.Request) {
 	tokenString := r.URL.Query().Get("token")

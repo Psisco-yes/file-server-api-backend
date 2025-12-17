@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/httprate"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -2022,5 +2023,54 @@ func TestAuthMiddleware(t *testing.T) {
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 		require.Equal(t, http.StatusUnauthorized, rr.Code)
+	})
+}
+
+func TestRateLimiting(t *testing.T) {
+	router := chi.NewRouter()
+	router.Route("/api/v1", func(r chi.Router) {
+		r.Use(httprate.LimitByIP(60, 1*time.Second))
+
+		r.With(testServer.AuthMiddleware).Get("/me", testServer.GetCurrentUserHandler)
+
+		r.Group(func(r chi.Router) {
+			r.Use(httprate.LimitByIP(5, 10*time.Second))
+			r.Post("/auth/login", testServer.LoginHandler)
+		})
+	})
+
+	t.Run("allows requests within the general limit", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/v1/me", nil)
+		req.Header.Set("Authorization", "Bearer "+testUserToken)
+
+		for i := 0; i < 10; i++ {
+			rr := httptest.NewRecorder()
+			router.ServeHTTP(rr, req)
+			require.Equal(t, http.StatusOK, rr.Code, "Request %d should be allowed", i+1)
+		}
+	})
+
+	t.Run("blocks requests exceeding the login rate limit", func(t *testing.T) {
+		loginReq := LoginRequest{Username: "any_user", Password: "any_password"}
+		body, _ := json.Marshal(loginReq)
+
+		for i := 0; i < 5; i++ {
+			req := httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewReader(body))
+			rr := httptest.NewRecorder()
+			router.ServeHTTP(rr, req)
+			require.NotEqual(t, http.StatusTooManyRequests, rr.Code, "Request %d should not be rate limited", i+1)
+		}
+
+		req := httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewReader(body))
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+		require.Equal(t, http.StatusTooManyRequests, rr.Code, "The 6th request should be rate limited")
+
+		time.Sleep(10 * time.Second)
+
+		reqAfterWait := httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewReader(body))
+		rrAfterWait := httptest.NewRecorder()
+		router.ServeHTTP(rrAfterWait, reqAfterWait)
+		require.NotEqual(t, http.StatusTooManyRequests, rrAfterWait.Code, "Request after waiting period should be allowed")
 	})
 }

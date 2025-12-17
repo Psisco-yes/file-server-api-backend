@@ -31,6 +31,7 @@ import (
 // @Failure      404            {string}  string "Not Found - Parent folder not found"
 // @Failure      409            {string}  string "Conflict - a file with the same name already exists"
 // @Failure      413            {string}  string "Payload Too Large - Storage quota exceeded"
+// @Failure      429            {string}  string "Too Many Requests"
 // @Failure      500            {string}  string "Internal Server Error"
 // @Router       /nodes/upload/initiate [post]
 func (s *Server) InitiateUploadHandler(w http.ResponseWriter, r *http.Request) {
@@ -116,6 +117,7 @@ func (s *Server) InitiateUploadHandler(w http.ResponseWriter, r *http.Request) {
 // @Failure      401      {string}  string "Unauthorized"
 // @Failure      404      {string}  string "Not Found"
 // @Failure      416      {string}  string "Range Not Satisfiable"
+// @Failure      429      {string}  string "Too Many Requests"
 // @Failure      500      {string}  string "Internal Server Error"
 // @Router       /nodes/upload/{uploadId} [patch]
 func (s *Server) UploadChunkHandler(w http.ResponseWriter, r *http.Request) {
@@ -212,6 +214,7 @@ func (s *Server) UploadChunkHandler(w http.ResponseWriter, r *http.Request) {
 // @Failure      400        {string}  string "Bad Request - Upload incomplete or file mismatch"
 // @Failure      401        {string}  string "Unauthorized"
 // @Failure      404        {string}  string "Not Found"
+// @Failure      429        {string}  string "Too Many Requests"
 // @Failure      500        {string}  string "Internal Server Error"
 // @Router       /nodes/upload/{uploadId}/complete [post]
 func (s *Server) CompleteUploadHandler(w http.ResponseWriter, r *http.Request) {

@@ -25,6 +25,7 @@ import (
 // @Failure      401          {string}  string "Unauthorized"
 // @Failure      404          {string}  string "Not Found - Node or recipient not found"
 // @Failure      409          {string}  string "Conflict - Node is already shared with this user"
+// @Failure      429          {string}  string "Too Many Requests"
 // @Failure      500          {string}  string "Internal Server Error"
 // @Router       /nodes/{nodeId}/share [post]
 func (s *Server) ShareNodeHandler(w http.ResponseWriter, r *http.Request) {
@@ -129,6 +130,7 @@ func (s *Server) ShareNodeHandler(w http.ResponseWriter, r *http.Request) {
 // @Security     BearerAuth
 // @Success      200  {array}   SharingUserResponse
 // @Failure      401  {string}  string "Unauthorized"
+// @Failure      429  {string}  string "Too Many Requests"
 // @Failure      500  {string}  string "Internal Server Error"
 // @Router       /shares/incoming/users [get]
 func (s *Server) ListSharingUsersHandler(w http.ResponseWriter, r *http.Request) {
@@ -159,6 +161,7 @@ func (s *Server) ListSharingUsersHandler(w http.ResponseWriter, r *http.Request)
 // @Failure      400              {string}  string "Bad Request"
 // @Failure      401              {string}  string "Unauthorized"
 // @Failure      404              {string}  string "Not Found or access denied"
+// @Failure      429              {string}  string "Too Many Requests"
 // @Failure      500              {string}  string "Internal Server Error"
 // @Router       /shares/incoming/nodes [get]
 func (s *Server) ListSharedNodesHandler(w http.ResponseWriter, r *http.Request) {
@@ -228,6 +231,7 @@ func (s *Server) ListSharedNodesHandler(w http.ResponseWriter, r *http.Request) 
 // @Failure      400      {string}  string "Bad Request"
 // @Failure      401      {string}  string "Unauthorized"
 // @Failure      404      {string}  string "Not Found"
+// @Failure      429      {string}  string "Too Many Requests"
 // @Failure      500      {string}  string "Internal Server Error"
 // @Router       /shares/{shareId} [delete]
 func (s *Server) DeleteShareHandler(w http.ResponseWriter, r *http.Request) {
@@ -301,6 +305,7 @@ func (s *Server) DeleteShareHandler(w http.ResponseWriter, r *http.Request) {
 // @Param        sort       query     string  false  "Sort order. Comma-separated list of fields. Use '-' for descending. E.g., 'type,-name'"
 // @Success      200  {array}   models.RichNode
 // @Failure      401  {string}  string "Unauthorized"
+// @Failure      429  {string}  string "Too Many Requests"
 // @Failure      500  {string}  string "Internal Server Error"
 // @Router       /shares/outgoing/nodes [get]
 func (s *Server) ListOutgoingSharedNodesHandler(w http.ResponseWriter, r *http.Request) {

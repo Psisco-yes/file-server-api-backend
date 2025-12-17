@@ -17,6 +17,7 @@ import (
 // @Security     BearerAuth
 // @Success      200  {array}   models.Session
 // @Failure      401  {string}  string "Unauthorized"
+// @Failure      429  {string}  string "Too Many Requests"
 // @Failure      500  {string}  string "Internal Server Error"
 // @Router       /sessions [get]
 func (s *Server) ListSessionsHandler(w http.ResponseWriter, r *http.Request) {
@@ -40,6 +41,7 @@ func (s *Server) ListSessionsHandler(w http.ResponseWriter, r *http.Request) {
 // @Success      204        {null}    nil     "No Content"
 // @Failure      400        {string}  string "Bad Request - Invalid session ID format"
 // @Failure      401        {string}  string "Unauthorized"
+// @Failure      429        {string}  string "Too Many Requests"
 // @Failure      500        {string}  string "Internal Server Error"
 // @Router       /sessions/{sessionId} [delete]
 func (s *Server) DeleteSessionHandler(w http.ResponseWriter, r *http.Request) {
@@ -71,6 +73,7 @@ func (s *Server) DeleteSessionHandler(w http.ResponseWriter, r *http.Request) {
 // @Security     BearerAuth
 // @Success      204  {null}    nil "No Content"
 // @Failure      401  {string}  string "Unauthorized"
+// @Failure      429  {string}  string "Too Many Requests"
 // @Failure      500  {string}  string "Internal Server Error"
 // @Router       /sessions/terminate_all [post]
 func (s *Server) TerminateAllSessionsHandler(w http.ResponseWriter, r *http.Request) {

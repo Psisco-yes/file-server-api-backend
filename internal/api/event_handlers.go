@@ -15,6 +15,7 @@ import (
 // @Success      200    {array}   EventResponse
 // @Failure      400    {string}  string "Bad Request"
 // @Failure      401    {string}  string "Unauthorized"
+// @Failure      429    {string}  string "Too Many Requests"
 // @Failure      500    {string}  string "Internal Server Error"
 // @Router       /events [get]
 func (s *Server) GetEventsHandler(w http.ResponseWriter, r *http.Request) {
@@ -48,6 +49,7 @@ func (s *Server) GetEventsHandler(w http.ResponseWriter, r *http.Request) {
 // @Security     BearerAuth
 // @Success      200  {object}  LatestEventResponse
 // @Failure      401  {string}  string "Unauthorized"
+// @Failure      429  {string}  string "Too Many Requests"
 // @Failure      500  {string}  string "Internal Server Error"
 // @Router       /events/latest [get]
 func (s *Server) GetLatestEventHandler(w http.ResponseWriter, r *http.Request) {

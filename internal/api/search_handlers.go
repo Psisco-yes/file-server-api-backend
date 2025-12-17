@@ -18,6 +18,7 @@ import (
 // @Success      200    {array}   models.RichNode
 // @Failure      400    {string}  string "Bad Request - Missing query"
 // @Failure      401    {string}  string "Unauthorized"
+// @Failure      429    {string}  string "Too Many Requests"
 // @Failure      500    {string}  string "Internal Server Error"
 // @Router       /search [get]
 func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {

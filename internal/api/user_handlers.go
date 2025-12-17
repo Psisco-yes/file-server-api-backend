@@ -17,6 +17,7 @@ import (
 // @Security     BearerAuth
 // @Success      200  {object}  models.User
 // @Failure      401  {string}  string "Unauthorized"
+// @Failure      429  {string}  string "Too Many Requests"
 // @Failure      500  {string}  string "Internal Server Error"
 // @Router       /me [get]
 func (s *Server) GetCurrentUserHandler(w http.ResponseWriter, r *http.Request) {
@@ -45,6 +46,7 @@ func (s *Server) GetCurrentUserHandler(w http.ResponseWriter, r *http.Request) {
 // @Success      204                    {null}    nil                    "No Content - Password changed successfully"
 // @Failure      400                    {string}  string "Bad Request - New password is weak (less than 8 characters) or empty"
 // @Failure      401                    {string}  string "Unauthorized - Old password does not match"
+// @Failure      429                    {string}  string "Too Many Requests"
 // @Failure      500                    {string}  string "Internal Server Error"
 // @Router       /me/password [patch]
 func (s *Server) ChangePasswordHandler(w http.ResponseWriter, r *http.Request) {
@@ -104,6 +106,7 @@ func (s *Server) ChangePasswordHandler(w http.ResponseWriter, r *http.Request) {
 // @Success      200            {object}  models.User
 // @Failure      400            {string}  string "Bad Request"
 // @Failure      401            {string}  string "Unauthorized"
+// @Failure      429            {string}  string "Too Many Requests"
 // @Failure      500            {string}  string "Internal Server Error"
 // @Router       /me [patch]
 func (s *Server) UpdateCurrentUserHandler(w http.ResponseWriter, r *http.Request) {

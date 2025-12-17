@@ -6,26 +6,27 @@ W pełni funkcjonalny, REST-owy serwer plików zbudowany w Go, inspirowany syste
 
 ## Kluczowe Funkcjonalności
 
--   **Zaawansowane Zarządzanie Plikami:** Pełen zestaw operacji CRUD na plikach i folderach (tworzenie, kopiowanie, listowanie, zmiana nazwy, przenoszenie).
+-   **Zaawansowane Zarządzanie Plikami:** Pełen zestaw operacji CRUD na plikach i folderach.
 -   **Obsługa Dużych Plików:** Wsparcie dla przesyłania bardzo dużych plików dzięki mechanizmowi "chunked uploads", z możliwością wznawiania.
 -   **Sortowanie po Stronie Serwera:** Wszystkie endpointy listujące obsługują zaawansowane sortowanie wielokolumnowe (np. `?sort=type,-name`).
 -   **Bezpieczeństwo:**
     *   **Uwierzytelnianie JWT:** Zabezpieczenie oparte na tokenach z rotacją i krótkim czasem życia `access token`.
-    *   **Zarządzanie Sesjami:** Możliwość przeglądania i unieważniania aktywnych sesji na różnych urządzeniach.
+    *   **Zarządzanie Sesjami:** Możliwość przeglądania i unieważniania aktywnych sesji.
     *   **HTTPS:** Domyślna obsługa szyfrowanego połączenia dzięki integracji z Caddy.
--   **Elastyczne Udostępnianie:** Możliwość udostępniania plików i folderów innym użytkownikom z dwoma poziomami uprawnień (`read`/`write`) i dziedziczeniem uprawnień w zagnieżdżonych strukturach.
+    *   **Rate Limiting:** Wbudowana ochrona przed atakami typu brute-force i DoS.
+-   **Elastyczne Udostępnianie:** Możliwość udostępniania plików i folderów z uprawnieniami (`read`/`write`) i dziedziczeniem.
 -   **Użyteczne Funkcje:**
-    *   **Kosz:** Funkcjonalność "miękkiego usuwania" z opcją rekurencyjnego przywracania całej struktury folderów.
-    *   **Ulubione:** Oznaczanie ważnych plików i folderów dla szybkiego dostępu.
+    *   **Kosz:** Funkcjonalność "miękkiego usuwania" z opcją rekurencyjnego przywracania.
+    *   **Ulubione:** Oznaczanie ważnych plików i folderów.
     *   **Wyszukiwarka:** Globalne wyszukiwanie po nazwie we własnych i udostępnionych zasobach.
     *   **Archiwizator ZIP:** Pobieranie wielu plików i folderów jako pojedynczego archiwum `.zip`.
 -   **System Czasu Rzeczywistego:**
-    *   **Dziennik Zdarzeń:** Umożliwia wydajną synchronizację "catch-up" dla klientów, którzy byli offline.
-    *   **WebSockets:** Natychmiastowe, ukierunkowane powiadomienia o wszystkich zmianach w systemie, wysyłane tylko do odpowiednich użytkowników.
+    *   **Dziennik Zdarzeń:** Umożliwia wydajną synchronizację "catch-up" dla klientów offline.
+    *   **WebSockets:** Natychmiastowe, ukierunkowane powiadomienia o wszystkich zmianach w systemie.
 -   **Zarządzanie Zasobami:** Limity miejsca (quotas) na użytkownika.
 -   **Monitoring i Diagnostyka:** Endpointy `/health` i `/metrics` (w formacie Prometheus).
 -   **Dokumentacja API:** Automatycznie generowana i interaktywna dokumentacja Swagger UI.
--   **Pełne Pokrycie Testami:** Wysokie pokrycie kodu testami integracyjnymi (API i baza danych) oraz jednostkowymi, weryfikującymi wszystkie kluczowe scenariusze.
+-   **Pełne Pokrycie Testami:** Wysokie pokrycie kodu testami integracyjnymi i jednostkowymi.
 
 ## Stack Technologiczny
 
@@ -44,7 +45,7 @@ Ten przewodnik zakłada, że serwer jest uruchamiany lokalnie.
 
 1.  **Git**
 2.  **Docker** i **Docker Compose**
-3.  **mkcert** (do wygenerowania lokalnie zaufanych certyfikatów SSL)
+3.  **mkcert**
 
 ### Kroki Instalacyjne
 

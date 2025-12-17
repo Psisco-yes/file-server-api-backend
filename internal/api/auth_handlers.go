@@ -22,6 +22,7 @@ import (
 // @Success      200            {object}  TokenResponse
 // @Failure      400            {string}  string "Invalid request body"
 // @Failure      401            {string}  string "Invalid username or password"
+// @Failure      429            {string}  string "Too Many Requests - Limit: 10 requests per minute."
 // @Failure      500            {string}  string "Internal Server Error"
 // @Router       /auth/login [post]
 func (s *Server) LoginHandler(w http.ResponseWriter, r *http.Request) {
@@ -94,6 +95,7 @@ func (s *Server) LoginHandler(w http.ResponseWriter, r *http.Request) {
 // @Success      200                   {object}  TokenResponse
 // @Failure      400                   {string}  string "Invalid request body or missing token"
 // @Failure      401                   {string}  string "Invalid or expired refresh token"
+// @Failure      429                   {string}  string "Too Many Requests"
 // @Failure      500                   {string}  string "Internal Server Error"
 // @Router       /auth/refresh [post]
 func (s *Server) RefreshTokenHandler(w http.ResponseWriter, r *http.Request) {

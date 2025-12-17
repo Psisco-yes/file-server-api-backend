@@ -6,6 +6,7 @@
 // @securityDefinitions.apikey BearerAuth
 // @in header
 // @name Authorization
+// @response 429 {string} string "Too Many Requests"
 package main
 
 import (
@@ -17,11 +18,13 @@ import (
 	"serwer-plikow/internal/database"
 	"serwer-plikow/internal/storage"
 	"serwer-plikow/internal/websocket"
+	"time"
 
 	"github.com/go-chi/cors"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/httprate"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
@@ -82,8 +85,16 @@ func main() {
 	r.Get("/metrics", metricsHandler())
 
 	r.Route("/api/v1", func(r chi.Router) {
+		r.Use(httprate.LimitByIP(60, 1*time.Second))
+
 		r.Get("/ws", server.ServeWsHandler)
-		r.Post("/auth/login", server.LoginHandler)
+
+		r.Group(func(r chi.Router) {
+			r.Use(httprate.LimitByIP(10, 1*time.Minute))
+
+			r.Post("/auth/login", server.LoginHandler)
+		})
+
 		r.Post("/auth/refresh", server.RefreshTokenHandler)
 
 		r.Group(func(r chi.Router) {
