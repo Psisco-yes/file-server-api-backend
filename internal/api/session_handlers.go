@@ -38,7 +38,7 @@ func (s *Server) ListSessionsHandler(w http.ResponseWriter, r *http.Request) {
 // @Tags         sessions
 // @Security     BearerAuth
 // @Param        sessionId  path      string  true  "ID of the session to terminate" format(uuid)
-// @Success      204        {null}    nil     "No Content"
+// @Success      204        {object}  nil     "No Content"
 // @Failure      400        {string}  string "Bad Request - Invalid session ID format"
 // @Failure      401        {string}  string "Unauthorized"
 // @Failure      404        {string}  string "Not Found - Session does not exist or does not belong to the user"
@@ -72,7 +72,7 @@ func (s *Server) DeleteSessionHandler(w http.ResponseWriter, r *http.Request) {
 // @Description  Terminates all active sessions for the currently authenticated user, effectively logging them out from all devices. This will also close all active WebSocket connections for the user.
 // @Tags         sessions
 // @Security     BearerAuth
-// @Success      204  {null}    nil "No Content"
+// @Success      204  {object}  nil    "No Content"
 // @Failure      401  {string}  string "Unauthorized"
 // @Failure      429  {string}  string "Too Many Requests"
 // @Failure      500  {string}  string "Internal Server Error"

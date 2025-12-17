@@ -434,10 +434,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "204": {
-                        "description": "No Content - Password changed successfully",
-                        "schema": {
-                            "type": "null"
-                        }
+                        "description": "No Content - Password changed successfully"
                     },
                     "400": {
                         "description": "Bad Request - New password is weak (less than 8 characters) or empty",
@@ -897,10 +894,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "204": {
-                        "description": "No Content",
-                        "schema": {
-                            "type": "null"
-                        }
+                        "description": "No Content"
                     },
                     "400": {
                         "description": "Bad Request - Invalid Content-Range header",
@@ -1102,10 +1096,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "204": {
-                        "description": "No Content",
-                        "schema": {
-                            "type": "null"
-                        }
+                        "description": "No Content"
                     },
                     "401": {
                         "description": "Unauthorized",
@@ -1407,10 +1398,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "204": {
-                        "description": "No Content",
-                        "schema": {
-                            "type": "null"
-                        }
+                        "description": "No Content"
                     },
                     "401": {
                         "description": "Unauthorized",
@@ -1466,10 +1454,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "204": {
-                        "description": "No Content",
-                        "schema": {
-                            "type": "null"
-                        }
+                        "description": "No Content"
                     },
                     "401": {
                         "description": "Unauthorized",
@@ -1785,10 +1770,7 @@ const docTemplate = `{
                 "summary": "Terminate all sessions (Log out everywhere)",
                 "responses": {
                     "204": {
-                        "description": "No Content",
-                        "schema": {
-                            "type": "null"
-                        }
+                        "description": "No Content"
                     },
                     "401": {
                         "description": "Unauthorized",
@@ -1835,10 +1817,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "204": {
-                        "description": "No Content",
-                        "schema": {
-                            "type": "null"
-                        }
+                        "description": "No Content"
                     },
                     "400": {
                         "description": "Bad Request - Invalid session ID format",
@@ -2182,10 +2161,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "204": {
-                        "description": "No Content",
-                        "schema": {
-                            "type": "null"
-                        }
+                        "description": "No Content"
                     },
                     "400": {
                         "description": "Bad Request - Invalid share ID",
@@ -2302,10 +2278,7 @@ const docTemplate = `{
                 "summary": "Purge trash",
                 "responses": {
                     "204": {
-                        "description": "No Content",
-                        "schema": {
-                            "type": "null"
-                        }
+                        "description": "No Content"
                     },
                     "401": {
                         "description": "Unauthorized",
@@ -2351,10 +2324,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "204": {
-                        "description": "No Content",
-                        "schema": {
-                            "type": "null"
-                        }
+                        "description": "No Content"
                     },
                     "401": {
                         "description": "Unauthorized",

@@ -16,7 +16,7 @@ import (
 // @Description  Permanently deletes all files and folders from the user's trash. This action cannot be undone.
 // @Tags         trash
 // @Security     BearerAuth
-// @Success      204  {null}    nil "No Content"
+// @Success      204  {object}  nil    "No Content"
 // @Failure      401  {string}  string "Unauthorized"
 // @Failure      429  {string}  string "Too Many Requests"
 // @Failure      500  {string}  string "Internal Server Error"
@@ -175,7 +175,7 @@ func (s *Server) RestoreNodeHandler(w http.ResponseWriter, r *http.Request) {
 // @Tags         trash
 // @Security     BearerAuth
 // @Param        nodeId   path      string  true  "The ID of the node to permanently delete from trash"
-// @Success      204      {null}    nil     "No Content"
+// @Success      204      {object}  nil     "No Content"
 // @Failure      401      {string}  string  "Unauthorized"
 // @Failure      404      {string}  string  "Not Found - Node not found in trash"
 // @Failure      429      {string}  string  "Too Many Requests"

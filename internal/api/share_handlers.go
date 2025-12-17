@@ -227,7 +227,7 @@ func (s *Server) ListSharedNodesHandler(w http.ResponseWriter, r *http.Request) 
 // @Tags         shares
 // @Security     BearerAuth
 // @Param        shareId  path      int  true  "ID of the share to delete"
-// @Success      204      {null}    nil "No Content"
+// @Success      204      {object}  nil    "No Content"
 // @Failure      400      {string}  string "Bad Request - Invalid share ID"
 // @Failure      401      {string}  string "Unauthorized"
 // @Failure      404      {string}  string "Not Found - Share not found or you are not the owner"

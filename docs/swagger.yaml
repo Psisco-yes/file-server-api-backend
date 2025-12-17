@@ -582,8 +582,6 @@ paths:
       responses:
         "204":
           description: No Content - Password changed successfully
-          schema:
-            type: "null"
         "400":
           description: Bad Request - New password is weak (less than 8 characters)
             or empty
@@ -679,8 +677,6 @@ paths:
       responses:
         "204":
           description: No Content
-          schema:
-            type: "null"
         "401":
           description: Unauthorized
           schema:
@@ -929,8 +925,6 @@ paths:
       responses:
         "204":
           description: No Content
-          schema:
-            type: "null"
         "401":
           description: Unauthorized
           schema:
@@ -959,8 +953,6 @@ paths:
       responses:
         "204":
           description: No Content
-          schema:
-            type: "null"
         "401":
           description: Unauthorized
           schema:
@@ -1267,8 +1259,6 @@ paths:
       responses:
         "204":
           description: No Content
-          schema:
-            type: "null"
         "400":
           description: Bad Request - Invalid Content-Range header
           schema:
@@ -1503,8 +1493,6 @@ paths:
       responses:
         "204":
           description: No Content
-          schema:
-            type: "null"
         "400":
           description: Bad Request - Invalid session ID format
           schema:
@@ -1539,8 +1527,6 @@ paths:
       responses:
         "204":
           description: No Content
-          schema:
-            type: "null"
         "401":
           description: Unauthorized
           schema:
@@ -1570,8 +1556,6 @@ paths:
       responses:
         "204":
           description: No Content
-          schema:
-            type: "null"
         "400":
           description: Bad Request - Invalid share ID
           schema:
@@ -1854,8 +1838,6 @@ paths:
       responses:
         "204":
           description: No Content
-          schema:
-            type: "null"
         "401":
           description: Unauthorized
           schema:
@@ -1884,8 +1866,6 @@ paths:
       responses:
         "204":
           description: No Content
-          schema:
-            type: "null"
         "401":
           description: Unauthorized
           schema:

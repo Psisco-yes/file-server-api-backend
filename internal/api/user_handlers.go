@@ -43,7 +43,7 @@ func (s *Server) GetCurrentUserHandler(w http.ResponseWriter, r *http.Request) {
 // @Accept       json
 // @Security     BearerAuth
 // @Param        changePasswordRequest  body      ChangePasswordRequest  true  "Old and new password"
-// @Success      204                    {null}    nil                    "No Content - Password changed successfully"
+// @Success      204                    {object}  nil    "No Content - Password changed successfully"
 // @Failure      400                    {string}  string "Bad Request - New password is weak (less than 8 characters) or empty"
 // @Failure      401                    {string}  string "Unauthorized - Old password does not match"
 // @Failure      429                    {string}  string "Too Many Requests"

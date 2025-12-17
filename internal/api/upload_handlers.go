@@ -112,7 +112,7 @@ func (s *Server) InitiateUploadHandler(w http.ResponseWriter, r *http.Request) {
 // @Security     BearerAuth
 // @Param        uploadId   path      string  true  "The ID of the upload session"
 // @Param        Content-Range header string true "Indicates the byte range of the chunk (e.g., 'bytes 0-1048575/4194304')"
-// @Success      204      {null}    nil     "No Content"
+// @Success      204      {object}  nil    "No Content"
 // @Failure      400      {string}  string "Bad Request - Invalid Content-Range header"
 // @Failure      401      {string}  string "Unauthorized"
 // @Failure      403      {string}  string "Forbidden"

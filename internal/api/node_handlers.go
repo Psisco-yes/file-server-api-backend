@@ -443,7 +443,7 @@ func (s *Server) DownloadFileHandler(w http.ResponseWriter, r *http.Request) {
 // @Tags         nodes
 // @Security     BearerAuth
 // @Param        nodeId   path      string  true  "Node ID to move to trash"
-// @Success      204      {null}    nil     "No Content"
+// @Success      204      {object}  nil    "No Content"
 // @Failure      401      {string}  string "Unauthorized"
 // @Failure      403      {string}  string "Forbidden - Write permission denied"
 // @Failure      404      {string}  string "Not Found - Node not found or access denied"
@@ -754,11 +754,11 @@ func (s *Server) UpdateNodeHandler(w http.ResponseWriter, r *http.Request) {
 // @Security     BearerAuth
 // @Param        ids    query     string  true  "Comma-separated list of Node IDs to include in the archive"
 // @Success      200    {file}    binary  "The ZIP archive content"
-// @Failure      400    {string}  string "Bad Request - Node IDs are required"
-// @Failure      401    {string}  string "Unauthorized"
-// @Failure      404    {string}  string "Not Found - One or more nodes not found or access denied"
-// @Failure      429    {string}  string "Too Many Requests"
-// @Failure      500    {string}  string "Internal Server Error"
+// @Failure      400    {string}  string  "Bad Request - Node IDs are required"
+// @Failure      401    {string}  string  "Unauthorized"
+// @Failure      404    {string}  string  "Not Found - One or more nodes not found or access denied"
+// @Failure      429    {string}  string  "Too Many Requests"
+// @Failure      500    {string}  string  "Internal Server Error"
 // @Router       /nodes/archive [get]
 func (s *Server) DownloadArchiveHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())
