@@ -1,4 +1,3 @@
-basePath: /api/v1
 definitions:
   internal_api.ChangePasswordRequest:
     properties:
@@ -12,10 +11,10 @@ definitions:
   internal_api.CopyNodeRequest:
     properties:
       new_name:
-        example: Kopia Raportu
+        example: Kopia Raportu Q3
         type: string
       parent_id:
-        example: target_folder_id
+        example: fLW5kAh2ia9vYmjMnU4nZ
         type: string
     type: object
   internal_api.CreateFolderRequest:
@@ -30,6 +29,7 @@ definitions:
   internal_api.EventResponse:
     properties:
       event_time:
+        example: "2025-12-01T16:30:00Z"
         type: string
       event_type:
         example: node_created
@@ -38,22 +38,28 @@ definitions:
         example: 123
         type: integer
       payload:
-        type: object
+        example: '{"id":"new_node_123","name":"New Document.docx","node_type":"file"}'
+        type: string
     type: object
   internal_api.InitiateUploadRequest:
     properties:
       mime_type:
+        example: application/zip
         type: string
       name:
+        example: annual_report.zip
         type: string
       parent_id:
+        example: _vx2a-43VqRT5wz_s9u4
         type: string
       size:
+        example: 1073741824
         type: integer
     type: object
   internal_api.InitiateUploadResponse:
     properties:
       upload_id:
+        example: a1b2c3d4-e5f6-7890-1234-567890abcdef
         type: string
     type: object
   internal_api.LatestEventResponse:
@@ -119,7 +125,7 @@ definitions:
   internal_api.RefreshTokenRequest:
     properties:
       refresh_token:
-        example: V1StGXR8_Z5jdHi6B-myT78q...
+        example: V1StGXR8_Z5jdHi6B-myT78qBTw_In4s-Wp-s_3_F3g
         type: string
     type: object
   internal_api.ShareDetailResponse:
@@ -134,6 +140,7 @@ definitions:
         example: user2
         type: string
       shared_at:
+        example: "2025-12-01T15:04:05Z"
         type: string
     type: object
   internal_api.ShareRequest:
@@ -163,6 +170,7 @@ definitions:
         example: 2
         type: integer
       shared_at:
+        example: "2025-12-01T15:04:05Z"
         type: string
       sharer_id:
         example: 1
@@ -183,25 +191,25 @@ definitions:
   internal_api.TokenResponse:
     properties:
       access_token:
-        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJ1c2VybmFtZSI6ImFkbWluIiwiZXhwIjoxNzM0NTQ3MjAwfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
         type: string
       refresh_token:
-        example: V1StGXR8_Z5jdHi6B-myT78q...
+        example: V1StGXR8_Z5jdHi6B-myT78qBTw_In4s-Wp-s_3_F3g
         type: string
     type: object
   internal_api.UpdateMeRequest:
     properties:
       display_name:
-        example: Jan Kowalski
+        example: Adam Nowak
         type: string
     type: object
   internal_api.UpdateNodeRequest:
     properties:
       name:
-        example: Nowa Nazwa Pliku
+        example: Zmieniona Nazwa Pliku
         type: string
       parent_id:
-        example: bNowyFolderRodzic123
+        example: fLW5kAh2ia9vYmjMnU4nZ
         type: string
     type: object
   serwer-plikow_internal_models.RichNode:
@@ -286,11 +294,6 @@ definitions:
     type: object
 info:
   contact: {}
-  description: A comprehensive file server API built with Go. It supports file and
-    folder management, sharing, real-time updates via WebSockets, and more. All protected
-    endpoints require a Bearer Token for authorization.
-  title: File Server API
-  version: "1.0"
 paths:
   /auth/login:
     post:
@@ -318,6 +321,10 @@ paths:
             type: string
         "401":
           description: Invalid username or password
+          schema:
+            type: string
+        "429":
+          description: 'Too Many Requests - Limit: 10 requests per minute.'
           schema:
             type: string
         "500":
@@ -356,6 +363,10 @@ paths:
           description: Invalid or expired refresh token
           schema:
             type: string
+        "429":
+          description: Too Many Requests
+          schema:
+            type: string
         "500":
           description: Internal Server Error
           schema:
@@ -382,11 +393,15 @@ paths:
               $ref: '#/definitions/internal_api.EventResponse'
             type: array
         "400":
-          description: Bad Request
+          description: Bad Request - Invalid 'since' parameter
           schema:
             type: string
         "401":
           description: Unauthorized
+          schema:
+            type: string
+        "429":
+          description: Too Many Requests
           schema:
             type: string
         "500":
@@ -412,6 +427,10 @@ paths:
             $ref: '#/definitions/internal_api.LatestEventResponse'
         "401":
           description: Unauthorized
+          schema:
+            type: string
+        "429":
+          description: Too Many Requests
           schema:
             type: string
         "500":
@@ -456,6 +475,10 @@ paths:
           description: Unauthorized
           schema:
             type: string
+        "429":
+          description: Too Many Requests
+          schema:
+            type: string
         "500":
           description: Internal Server Error
           schema:
@@ -478,6 +501,10 @@ paths:
             $ref: '#/definitions/serwer-plikow_internal_models.User'
         "401":
           description: Unauthorized
+          schema:
+            type: string
+        "429":
+          description: Too Many Requests
           schema:
             type: string
         "500":
@@ -514,6 +541,10 @@ paths:
             type: string
         "401":
           description: Unauthorized
+          schema:
+            type: string
+        "429":
+          description: Too Many Requests
           schema:
             type: string
         "500":
@@ -554,6 +585,10 @@ paths:
           description: Unauthorized - Old password does not match
           schema:
             type: string
+        "429":
+          description: Too Many Requests
+          schema:
+            type: string
         "500":
           description: Internal Server Error
           schema:
@@ -565,10 +600,12 @@ paths:
       - users
   /nodes:
     get:
-      description: Lists the user's own files and folders in a specified parent folder
-        or in the root directory.
+      description: Lists the files and folders within a specified parent folder. For
+        a user's own items, this lists their content. For items shared with the user,
+        it lists the content of a shared folder. To list items in the root directory
+        of a user's own space, omit the 'parent_id'.
       parameters:
-      - description: ID of the parent folder to list. Omit for root.
+      - description: ID of the parent folder to list. Omit for user's own root.
         in: query
         name: parent_id
         type: string
@@ -600,13 +637,17 @@ paths:
           description: Unauthorized
           schema:
             type: string
+        "429":
+          description: Too Many Requests
+          schema:
+            type: string
         "500":
           description: Internal Server Error
           schema:
             type: string
       security:
       - BearerAuth: []
-      summary: List user's own nodes
+      summary: List nodes in a folder
       tags:
       - nodes
   /nodes/{nodeId}:
@@ -634,7 +675,11 @@ paths:
           schema:
             type: string
         "404":
-          description: Not Found
+          description: Not Found - Node not found or access denied
+          schema:
+            type: string
+        "429":
+          description: Too Many Requests
           schema:
             type: string
         "500":
@@ -672,7 +717,11 @@ paths:
           schema:
             type: string
         "404":
-          description: Not Found
+          description: Not Found - Node not found or access denied
+          schema:
+            type: string
+        "429":
+          description: Too Many Requests
           schema:
             type: string
         "500":
@@ -724,11 +773,16 @@ paths:
           schema:
             type: string
         "404":
-          description: Not Found
+          description: Not Found - Node or target folder not found
           schema:
             type: string
         "409":
-          description: Conflict
+          description: Conflict - A node with the same name already exists in the
+            target location
+          schema:
+            type: string
+        "429":
+          description: Too Many Requests
           schema:
             type: string
         "500":
@@ -778,7 +832,7 @@ paths:
           schema:
             type: string
         "403":
-          description: Forbidden - Write permission denied
+          description: Forbidden - Write permission denied in target location
           schema:
             type: string
         "404":
@@ -792,6 +846,10 @@ paths:
             type: string
         "413":
           description: Payload Too Large - Not enough storage space
+          schema:
+            type: string
+        "429":
+          description: Too Many Requests
           schema:
             type: string
         "500":
@@ -828,7 +886,11 @@ paths:
           schema:
             type: string
         "404":
-          description: Not Found
+          description: Not Found - File not found or access denied
+          schema:
+            type: string
+        "429":
+          description: Too Many Requests
           schema:
             type: string
         "500":
@@ -856,6 +918,10 @@ paths:
             type: "null"
         "401":
           description: Unauthorized
+          schema:
+            type: string
+        "429":
+          description: Too Many Requests
           schema:
             type: string
         "500":
@@ -892,6 +958,10 @@ paths:
           description: Conflict - Node is already in favorites
           schema:
             type: string
+        "429":
+          description: Too Many Requests
+          schema:
+            type: string
         "500":
           description: Internal Server Error
           schema:
@@ -905,7 +975,7 @@ paths:
     post:
       description: Restores a file or folder (and all of its contents) from the trash
         to its original location. Fails if a node with the same name already exists
-        in the target location.
+        in the target location, unless 'renameOnConflict' is true.
       parameters:
       - description: Node ID to restore
         in: path
@@ -929,12 +999,16 @@ paths:
           schema:
             type: string
         "404":
-          description: Not Found
+          description: Not Found - Node not found in trash
           schema:
             type: string
         "409":
           description: Conflict - a node with the same name already exists in the
             original location
+          schema:
+            type: string
+        "429":
+          description: Too Many Requests
           schema:
             type: string
         "500":
@@ -972,7 +1046,7 @@ paths:
           schema:
             $ref: '#/definitions/internal_api.ShareResponse'
         "400":
-          description: Bad Request
+          description: Bad Request - Invalid request or cannot share with oneself
           schema:
             type: string
         "401":
@@ -985,6 +1059,10 @@ paths:
             type: string
         "409":
           description: Conflict - Node is already shared with this user
+          schema:
+            type: string
+        "429":
+          description: Too Many Requests
           schema:
             type: string
         "500":
@@ -1013,7 +1091,7 @@ paths:
           schema:
             type: file
         "400":
-          description: Bad Request
+          description: Bad Request - Node IDs are required
           schema:
             type: string
         "401":
@@ -1021,7 +1099,11 @@ paths:
           schema:
             type: string
         "404":
-          description: Not Found - one of the nodes does not exist
+          description: Not Found - One or more nodes not found or access denied
+          schema:
+            type: string
+        "429":
+          description: Too Many Requests
           schema:
             type: string
         "500":
@@ -1083,6 +1165,10 @@ paths:
             storage quota is exceeded.
           schema:
             type: string
+        "429":
+          description: Too Many Requests
+          schema:
+            type: string
         "500":
           description: Internal Server Error
           schema:
@@ -1114,7 +1200,7 @@ paths:
           schema:
             $ref: '#/definitions/serwer-plikow_internal_models.RichNode'
         "400":
-          description: Bad Request
+          description: Bad Request - Folder name cannot be empty
           schema:
             type: string
         "401":
@@ -1133,6 +1219,10 @@ paths:
           description: Conflict - a folder with the same name already exists
           schema:
             type: string
+        "429":
+          description: Too Many Requests
+          schema:
+            type: string
         "500":
           description: Internal Server Error
           schema:
@@ -1147,8 +1237,7 @@ paths:
       consumes:
       - application/octet-stream
       description: Uploads a single chunk of a file for a given upload_id. The 'Content-Range'
-        header is required for all chunks except the last one if its size is less
-        than chunk size.
+        header is required.
       parameters:
       - description: The ID of the upload session
         in: path
@@ -1158,6 +1247,7 @@ paths:
       - description: Indicates the byte range of the chunk (e.g., 'bytes 0-1048575/4194304')
         in: header
         name: Content-Range
+        required: true
         type: string
       responses:
         "204":
@@ -1165,19 +1255,28 @@ paths:
           schema:
             type: "null"
         "400":
-          description: Bad Request
+          description: Bad Request - Invalid Content-Range header
           schema:
             type: string
         "401":
           description: Unauthorized
           schema:
             type: string
+        "403":
+          description: Forbidden
+          schema:
+            type: string
         "404":
-          description: Not Found
+          description: Not Found - Upload session not found
           schema:
             type: string
         "416":
-          description: Range Not Satisfiable
+          description: Range Not Satisfiable - The chunk's start byte does not match
+            the expected offset
+          schema:
+            type: string
+        "429":
+          description: Too Many Requests
           schema:
             type: string
         "500":
@@ -1214,8 +1313,16 @@ paths:
           description: Unauthorized
           schema:
             type: string
+        "403":
+          description: Forbidden
+          schema:
+            type: string
         "404":
-          description: Not Found
+          description: Not Found - Upload session not found
+          schema:
+            type: string
+        "429":
+          description: Too Many Requests
           schema:
             type: string
         "500":
@@ -1267,6 +1374,10 @@ paths:
           description: Payload Too Large - Storage quota exceeded
           schema:
             type: string
+        "429":
+          description: Too Many Requests
+          schema:
+            type: string
         "500":
           description: Internal Server Error
           schema:
@@ -1311,11 +1422,15 @@ paths:
               $ref: '#/definitions/serwer-plikow_internal_models.RichNode'
             type: array
         "400":
-          description: Bad Request - Missing query
+          description: Bad Request - Missing query parameter 'q'
           schema:
             type: string
         "401":
           description: Unauthorized
+          schema:
+            type: string
+        "429":
+          description: Too Many Requests
           schema:
             type: string
         "500":
@@ -1343,6 +1458,10 @@ paths:
             type: array
         "401":
           description: Unauthorized
+          schema:
+            type: string
+        "429":
+          description: Too Many Requests
           schema:
             type: string
         "500":
@@ -1379,6 +1498,15 @@ paths:
           description: Unauthorized
           schema:
             type: string
+        "404":
+          description: Not Found - Session does not exist or does not belong to the
+            user
+          schema:
+            type: string
+        "429":
+          description: Too Many Requests
+          schema:
+            type: string
         "500":
           description: Internal Server Error
           schema:
@@ -1400,6 +1528,10 @@ paths:
             type: "null"
         "401":
           description: Unauthorized
+          schema:
+            type: string
+        "429":
+          description: Too Many Requests
           schema:
             type: string
         "500":
@@ -1426,7 +1558,7 @@ paths:
           schema:
             type: "null"
         "400":
-          description: Bad Request
+          description: Bad Request - Invalid share ID
           schema:
             type: string
         "401":
@@ -1434,7 +1566,11 @@ paths:
           schema:
             type: string
         "404":
-          description: Not Found
+          description: Not Found - Share not found or you are not the owner
+          schema:
+            type: string
+        "429":
+          description: Too Many Requests
           schema:
             type: string
         "500":
@@ -1449,7 +1585,8 @@ paths:
   /shares/incoming/nodes:
     get:
       description: Lists files and folders shared with the current user by a specific
-        sharer. Can list the root of shared items or the content of a subfolder.
+        sharer. Can list the root of shared items (by omitting parent_id) or the content
+        of a shared subfolder (by providing its parent_id).
       parameters:
       - description: Username of the person who shared the content
         in: query
@@ -1486,7 +1623,7 @@ paths:
               $ref: '#/definitions/serwer-plikow_internal_models.RichNode'
             type: array
         "400":
-          description: Bad Request
+          description: Bad Request - Missing sharer_username
           schema:
             type: string
         "401":
@@ -1494,7 +1631,11 @@ paths:
           schema:
             type: string
         "404":
-          description: Not Found or access denied
+          description: Not Found - Sharer or folder not found, or access denied
+          schema:
+            type: string
+        "429":
+          description: Too Many Requests
           schema:
             type: string
         "500":
@@ -1522,6 +1663,10 @@ paths:
             type: array
         "401":
           description: Unauthorized
+          schema:
+            type: string
+        "429":
+          description: Too Many Requests
           schema:
             type: string
         "500":
@@ -1566,6 +1711,10 @@ paths:
           description: Unauthorized
           schema:
             type: string
+        "429":
+          description: Too Many Requests
+          schema:
+            type: string
         "500":
           description: Internal Server Error
           schema:
@@ -1608,6 +1757,10 @@ paths:
           description: Unauthorized
           schema:
             type: string
+        "429":
+          description: Too Many Requests
+          schema:
+            type: string
         "500":
           description: Internal Server Error
           schema:
@@ -1640,6 +1793,10 @@ paths:
           description: Not Found - Node not found in trash
           schema:
             type: string
+        "429":
+          description: Too Many Requests
+          schema:
+            type: string
         "500":
           description: Internal Server Error
           schema:
@@ -1660,6 +1817,10 @@ paths:
             type: "null"
         "401":
           description: Unauthorized
+          schema:
+            type: string
+        "429":
+          description: Too Many Requests
           schema:
             type: string
         "500":
@@ -1690,15 +1851,11 @@ paths:
           description: Unauthorized - Invalid or missing token
           schema:
             type: string
+        "429":
+          description: Too Many Requests
+          schema:
+            type: string
       summary: Establish WebSocket connection
       tags:
       - websocket
-schemes:
-- http
-- https
-securityDefinitions:
-  BearerAuth:
-    in: header
-    name: Authorization
-    type: apiKey
 swagger: "2.0"

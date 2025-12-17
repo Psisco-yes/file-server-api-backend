@@ -14,9 +14,9 @@ import (
 // @Param        q      query     string  true  "Search query string"
 // @Param        limit  query     int     false "Number of items to return" default(100)
 // @Param        offset query     int     false "Offset for pagination" default(0)
-// @Param        sort       query     string  false  "Sort order. Comma-separated list of fields. Use '-' for descending. E.g., 'type,-name'"
+// @Param        sort   query     string  false "Sort order. Comma-separated list of fields. Use '-' for descending. E.g., 'type,-name'"
 // @Success      200    {array}   models.RichNode
-// @Failure      400    {string}  string "Bad Request - Missing query"
+// @Failure      400    {string}  string "Bad Request - Missing query parameter 'q'"
 // @Failure      401    {string}  string "Unauthorized"
 // @Failure      429    {string}  string "Too Many Requests"
 // @Failure      500    {string}  string "Internal Server Error"

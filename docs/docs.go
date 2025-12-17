@@ -58,6 +58,12 @@ const docTemplate = `{
                             "type": "string"
                         }
                     },
+                    "429": {
+                        "description": "Too Many Requests - Limit: 10 requests per minute.",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -110,6 +116,12 @@ const docTemplate = `{
                             "type": "string"
                         }
                     },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -153,13 +165,19 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad Request - Invalid 'since' parameter",
                         "schema": {
                             "type": "string"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -197,6 +215,12 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -263,6 +287,12 @@ const docTemplate = `{
                             "type": "string"
                         }
                     },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -296,6 +326,12 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -355,6 +391,12 @@ const docTemplate = `{
                             "type": "string"
                         }
                     },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -409,6 +451,12 @@ const docTemplate = `{
                             "type": "string"
                         }
                     },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -425,18 +473,18 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Lists the user's own files and folders in a specified parent folder or in the root directory.",
+                "description": "Lists the files and folders within a specified parent folder. For a user's own items, this lists their content. For items shared with the user, it lists the content of a shared folder. To list items in the root directory of a user's own space, omit the 'parent_id'.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "nodes"
                 ],
-                "summary": "List user's own nodes",
+                "summary": "List nodes in a folder",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "ID of the parent folder to list. Omit for root.",
+                        "description": "ID of the parent folder to list. Omit for user's own root.",
                         "name": "parent_id",
                         "in": "query"
                     },
@@ -473,6 +521,12 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -518,7 +572,7 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad Request - Node IDs are required",
                         "schema": {
                             "type": "string"
                         }
@@ -530,7 +584,13 @@ const docTemplate = `{
                         }
                     },
                     "404": {
-                        "description": "Not Found - one of the nodes does not exist",
+                        "description": "Not Found - One or more nodes not found or access denied",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -617,6 +677,12 @@ const docTemplate = `{
                             "type": "string"
                         }
                     },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -663,7 +729,7 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad Request - Folder name cannot be empty",
                         "schema": {
                             "type": "string"
                         }
@@ -688,6 +754,12 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "Conflict - a folder with the same name already exists",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -767,6 +839,12 @@ const docTemplate = `{
                             "type": "string"
                         }
                     },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -783,7 +861,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Uploads a single chunk of a file for a given upload_id. The 'Content-Range' header is required for all chunks except the last one if its size is less than chunk size.",
+                "description": "Uploads a single chunk of a file for a given upload_id. The 'Content-Range' header is required.",
                 "consumes": [
                     "application/octet-stream"
                 ],
@@ -803,7 +881,8 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Indicates the byte range of the chunk (e.g., 'bytes 0-1048575/4194304')",
                         "name": "Content-Range",
-                        "in": "header"
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -814,7 +893,7 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad Request - Invalid Content-Range header",
                         "schema": {
                             "type": "string"
                         }
@@ -825,14 +904,26 @@ const docTemplate = `{
                             "type": "string"
                         }
                     },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "404": {
-                        "description": "Not Found",
+                        "description": "Not Found - Upload session not found",
                         "schema": {
                             "type": "string"
                         }
                     },
                     "416": {
-                        "description": "Range Not Satisfiable",
+                        "description": "Range Not Satisfiable - The chunk's start byte does not match the expected offset",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -889,8 +980,20 @@ const docTemplate = `{
                             "type": "string"
                         }
                     },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "404": {
-                        "description": "Not Found",
+                        "description": "Not Found - Upload session not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -948,7 +1051,13 @@ const docTemplate = `{
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "Not Found - Node not found or access denied",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -1001,7 +1110,13 @@ const docTemplate = `{
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "Not Found - Node not found or access denied",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -1075,13 +1190,19 @@ const docTemplate = `{
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "Not Found - Node or target folder not found",
                         "schema": {
                             "type": "string"
                         }
                     },
                     "409": {
-                        "description": "Conflict",
+                        "description": "Conflict - A node with the same name already exists in the target location",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -1151,7 +1272,7 @@ const docTemplate = `{
                         }
                     },
                     "403": {
-                        "description": "Forbidden - Write permission denied",
+                        "description": "Forbidden - Write permission denied in target location",
                         "schema": {
                             "type": "string"
                         }
@@ -1170,6 +1291,12 @@ const docTemplate = `{
                     },
                     "413": {
                         "description": "Payload Too Large - Not enough storage space",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -1227,7 +1354,13 @@ const docTemplate = `{
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "Not Found - File not found or access denied",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -1287,6 +1420,12 @@ const docTemplate = `{
                             "type": "string"
                         }
                     },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -1328,6 +1467,12 @@ const docTemplate = `{
                             "type": "string"
                         }
                     },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -1344,7 +1489,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Restores a file or folder (and all of its contents) from the trash to its original location. Fails if a node with the same name already exists in the target location.",
+                "description": "Restores a file or folder (and all of its contents) from the trash to its original location. Fails if a node with the same name already exists in the target location, unless 'renameOnConflict' is true.",
                 "produces": [
                     "application/json"
                 ],
@@ -1381,13 +1526,19 @@ const docTemplate = `{
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "Not Found - Node not found in trash",
                         "schema": {
                             "type": "string"
                         }
                     },
                     "409": {
                         "description": "Conflict - a node with the same name already exists in the original location",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -1445,7 +1596,7 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad Request - Invalid request or cannot share with oneself",
                         "schema": {
                             "type": "string"
                         }
@@ -1464,6 +1615,12 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "Conflict - Node is already shared with this user",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -1532,13 +1689,19 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request - Missing query",
+                        "description": "Bad Request - Missing query parameter 'q'",
                         "schema": {
                             "type": "string"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -1583,6 +1746,12 @@ const docTemplate = `{
                             "type": "string"
                         }
                     },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -1613,6 +1782,12 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -1667,6 +1842,18 @@ const docTemplate = `{
                             "type": "string"
                         }
                     },
+                    "404": {
+                        "description": "Not Found - Session does not exist or does not belong to the user",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -1683,7 +1870,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Lists files and folders shared with the current user by a specific sharer. Can list the root of shared items or the content of a subfolder.",
+                "description": "Lists files and folders shared with the current user by a specific sharer. Can list the root of shared items (by omitting parent_id) or the content of a shared subfolder (by providing its parent_id).",
                 "produces": [
                     "application/json"
                 ],
@@ -1737,7 +1924,7 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad Request - Missing sharer_username",
                         "schema": {
                             "type": "string"
                         }
@@ -1749,7 +1936,13 @@ const docTemplate = `{
                         }
                     },
                     "404": {
-                        "description": "Not Found or access denied",
+                        "description": "Not Found - Sharer or folder not found, or access denied",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -1790,6 +1983,12 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -1856,6 +2055,12 @@ const docTemplate = `{
                             "type": "string"
                         }
                     },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -1894,7 +2099,7 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad Request - Invalid share ID",
                         "schema": {
                             "type": "string"
                         }
@@ -1906,7 +2111,13 @@ const docTemplate = `{
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "Not Found - Share not found or you are not the owner",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -1973,6 +2184,12 @@ const docTemplate = `{
                             "type": "string"
                         }
                     },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -2003,6 +2220,12 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -2056,6 +2279,12 @@ const docTemplate = `{
                             "type": "string"
                         }
                     },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -2093,6 +2322,12 @@ const docTemplate = `{
                         "schema": {
                             "type": "string"
                         }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 }
             }
@@ -2117,11 +2352,11 @@ const docTemplate = `{
             "properties": {
                 "new_name": {
                     "type": "string",
-                    "example": "Kopia Raportu"
+                    "example": "Kopia Raportu Q3"
                 },
                 "parent_id": {
                     "type": "string",
-                    "example": "target_folder_id"
+                    "example": "fLW5kAh2ia9vYmjMnU4nZ"
                 }
             }
         },
@@ -2142,7 +2377,8 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "event_time": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "2025-12-01T16:30:00Z"
                 },
                 "event_type": {
                     "type": "string",
@@ -2153,7 +2389,8 @@ const docTemplate = `{
                     "example": 123
                 },
                 "payload": {
-                    "type": "object"
+                    "type": "string",
+                    "example": "{\"id\":\"new_node_123\",\"name\":\"New Document.docx\",\"node_type\":\"file\"}"
                 }
             }
         },
@@ -2161,16 +2398,20 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "mime_type": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "application/zip"
                 },
                 "name": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "annual_report.zip"
                 },
                 "parent_id": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "_vx2a-43VqRT5wz_s9u4"
                 },
                 "size": {
-                    "type": "integer"
+                    "type": "integer",
+                    "example": 1073741824
                 }
             }
         },
@@ -2178,7 +2419,8 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "upload_id": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "a1b2c3d4-e5f6-7890-1234-567890abcdef"
                 }
             }
         },
@@ -2273,7 +2515,7 @@ const docTemplate = `{
             "properties": {
                 "refresh_token": {
                     "type": "string",
-                    "example": "V1StGXR8_Z5jdHi6B-myT78q..."
+                    "example": "V1StGXR8_Z5jdHi6B-myT78qBTw_In4s-Wp-s_3_F3g"
                 }
             }
         },
@@ -2293,7 +2535,8 @@ const docTemplate = `{
                     "example": "user2"
                 },
                 "shared_at": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "2025-12-01T15:04:05Z"
                 }
             }
         },
@@ -2334,7 +2577,8 @@ const docTemplate = `{
                     "example": 2
                 },
                 "shared_at": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "2025-12-01T15:04:05Z"
                 },
                 "sharer_id": {
                     "type": "integer",
@@ -2364,11 +2608,11 @@ const docTemplate = `{
             "properties": {
                 "access_token": {
                     "type": "string",
-                    "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJ1c2VybmFtZSI6ImFkbWluIiwiZXhwIjoxNzM0NTQ3MjAwfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
                 },
                 "refresh_token": {
                     "type": "string",
-                    "example": "V1StGXR8_Z5jdHi6B-myT78q..."
+                    "example": "V1StGXR8_Z5jdHi6B-myT78qBTw_In4s-Wp-s_3_F3g"
                 }
             }
         },
@@ -2377,7 +2621,7 @@ const docTemplate = `{
             "properties": {
                 "display_name": {
                     "type": "string",
-                    "example": "Jan Kowalski"
+                    "example": "Adam Nowak"
                 }
             }
         },
@@ -2386,11 +2630,11 @@ const docTemplate = `{
             "properties": {
                 "name": {
                     "type": "string",
-                    "example": "Nowa Nazwa Pliku"
+                    "example": "Zmieniona Nazwa Pliku"
                 },
                 "parent_id": {
                     "type": "string",
-                    "example": "bNowyFolderRodzic123"
+                    "example": "fLW5kAh2ia9vYmjMnU4nZ"
                 }
             }
         },
@@ -2509,24 +2753,17 @@ const docTemplate = `{
                 }
             }
         }
-    },
-    "securityDefinitions": {
-        "BearerAuth": {
-            "type": "apiKey",
-            "name": "Authorization",
-            "in": "header"
-        }
     }
 }`
 
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
-	Version:          "1.0",
+	Version:          "",
 	Host:             "",
-	BasePath:         "/api/v1",
-	Schemes:          []string{"http", "https"},
-	Title:            "File Server API",
-	Description:      "A comprehensive file server API built with Go. It supports file and folder management, sharing, real-time updates via WebSockets, and more. All protected endpoints require a Bearer Token for authorization.",
+	BasePath:         "",
+	Schemes:          []string{},
+	Title:            "",
+	Description:      "",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

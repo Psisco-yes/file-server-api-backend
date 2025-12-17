@@ -17,11 +17,11 @@ import (
 // @Security     BearerAuth
 // @Param        nodeId   path      string  true  "Node ID to add to favorites"
 // @Success      204      {null}    nil     "No Content"
-// @Failure      401      {string}  string "Unauthorized"
-// @Failure      404      {string}  string "Not Found - Node does not exist or user lacks access"
-// @Failure      409      {string}  string "Conflict - Node is already in favorites"
-// @Failure      429      {string}  string "Too Many Requests"
-// @Failure      500      {string}  string "Internal Server Error"
+// @Failure      401      {string}  string  "Unauthorized"
+// @Failure      404      {string}  string  "Not Found - Node does not exist or user lacks access"
+// @Failure      409      {string}  string  "Conflict - Node is already in favorites"
+// @Failure      429      {string}  string  "Too Many Requests"
+// @Failure      500      {string}  string  "Internal Server Error"
 // @Router       /nodes/{nodeId}/favorite [post]
 func (s *Server) AddFavoriteHandler(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r.Context())

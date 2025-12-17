@@ -21,7 +21,7 @@ import (
 // @Param        nodeId       path      string        true  "Node ID to share"
 // @Param        shareRequest body      ShareRequest  true  "Share details"
 // @Success      201          {object}  ShareResponse
-// @Failure      400          {string}  string "Bad Request"
+// @Failure      400          {string}  string "Bad Request - Invalid request or cannot share with oneself"
 // @Failure      401          {string}  string "Unauthorized"
 // @Failure      404          {string}  string "Not Found - Node or recipient not found"
 // @Failure      409          {string}  string "Conflict - Node is already shared with this user"
@@ -148,7 +148,7 @@ func (s *Server) ListSharingUsersHandler(w http.ResponseWriter, r *http.Request)
 }
 
 // @Summary      List items shared by a user
-// @Description  Lists files and folders shared with the current user by a specific sharer. Can list the root of shared items or the content of a subfolder.
+// @Description  Lists files and folders shared with the current user by a specific sharer. Can list the root of shared items (by omitting parent_id) or the content of a shared subfolder (by providing its parent_id).
 // @Tags         shares
 // @Produce      json
 // @Security     BearerAuth
@@ -156,11 +156,11 @@ func (s *Server) ListSharingUsersHandler(w http.ResponseWriter, r *http.Request)
 // @Param        parent_id        query     string  false  "ID of the shared parent folder to list. Omit for the root of shared items."
 // @Param        limit            query     int     false  "Number of items to return" default(100)
 // @Param        offset           query     int     false  "Offset for pagination" default(0)
-// @Param        sort       query     string  false  "Sort order. Comma-separated list of fields. Use '-' for descending. E.g., 'type,-name'"
+// @Param        sort             query     string  false  "Sort order. Comma-separated list of fields. Use '-' for descending. E.g., 'type,-name'"
 // @Success      200              {array}   models.RichNode
-// @Failure      400              {string}  string "Bad Request"
+// @Failure      400              {string}  string "Bad Request - Missing sharer_username"
 // @Failure      401              {string}  string "Unauthorized"
-// @Failure      404              {string}  string "Not Found or access denied"
+// @Failure      404              {string}  string "Not Found - Sharer or folder not found, or access denied"
 // @Failure      429              {string}  string "Too Many Requests"
 // @Failure      500              {string}  string "Internal Server Error"
 // @Router       /shares/incoming/nodes [get]
@@ -228,9 +228,9 @@ func (s *Server) ListSharedNodesHandler(w http.ResponseWriter, r *http.Request) 
 // @Security     BearerAuth
 // @Param        shareId  path      int  true  "ID of the share to delete"
 // @Success      204      {null}    nil "No Content"
-// @Failure      400      {string}  string "Bad Request"
+// @Failure      400      {string}  string "Bad Request - Invalid share ID"
 // @Failure      401      {string}  string "Unauthorized"
-// @Failure      404      {string}  string "Not Found"
+// @Failure      404      {string}  string "Not Found - Share not found or you are not the owner"
 // @Failure      429      {string}  string "Too Many Requests"
 // @Failure      500      {string}  string "Internal Server Error"
 // @Router       /shares/{shareId} [delete]

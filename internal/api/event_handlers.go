@@ -13,7 +13,7 @@ import (
 // @Security     BearerAuth
 // @Param        since  query     int  false  "The ID of the last event received. Omit or use 0 to get all events."
 // @Success      200    {array}   EventResponse
-// @Failure      400    {string}  string "Bad Request"
+// @Failure      400    {string}  string "Bad Request - Invalid 'since' parameter"
 // @Failure      401    {string}  string "Unauthorized"
 // @Failure      429    {string}  string "Too Many Requests"
 // @Failure      500    {string}  string "Internal Server Error"

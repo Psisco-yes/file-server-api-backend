@@ -106,17 +106,18 @@ func (s *Server) InitiateUploadHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary      Upload a file chunk
-// @Description  Uploads a single chunk of a file for a given upload_id. The 'Content-Range' header is required for all chunks except the last one if its size is less than chunk size.
+// @Description  Uploads a single chunk of a file for a given upload_id. The 'Content-Range' header is required.
 // @Tags         uploads
 // @Accept       application/octet-stream
 // @Security     BearerAuth
 // @Param        uploadId   path      string  true  "The ID of the upload session"
-// @Param        Content-Range header string false "Indicates the byte range of the chunk (e.g., 'bytes 0-1048575/4194304')"
+// @Param        Content-Range header string true "Indicates the byte range of the chunk (e.g., 'bytes 0-1048575/4194304')"
 // @Success      204      {null}    nil     "No Content"
-// @Failure      400      {string}  string "Bad Request"
+// @Failure      400      {string}  string "Bad Request - Invalid Content-Range header"
 // @Failure      401      {string}  string "Unauthorized"
-// @Failure      404      {string}  string "Not Found"
-// @Failure      416      {string}  string "Range Not Satisfiable"
+// @Failure      403      {string}  string "Forbidden"
+// @Failure      404      {string}  string "Not Found - Upload session not found"
+// @Failure      416      {string}  string "Range Not Satisfiable - The chunk's start byte does not match the expected offset"
 // @Failure      429      {string}  string "Too Many Requests"
 // @Failure      500      {string}  string "Internal Server Error"
 // @Router       /nodes/upload/{uploadId} [patch]
@@ -213,7 +214,8 @@ func (s *Server) UploadChunkHandler(w http.ResponseWriter, r *http.Request) {
 // @Success      201        {object}  models.RichNode
 // @Failure      400        {string}  string "Bad Request - Upload incomplete or file mismatch"
 // @Failure      401        {string}  string "Unauthorized"
-// @Failure      404        {string}  string "Not Found"
+// @Failure      403        {string}  string "Forbidden"
+// @Failure      404        {string}  string "Not Found - Upload session not found"
 // @Failure      429        {string}  string "Too Many Requests"
 // @Failure      500        {string}  string "Internal Server Error"
 // @Router       /nodes/upload/{uploadId}/complete [post]

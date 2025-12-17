@@ -1,6 +1,6 @@
 // @title           File Server API
 // @version         1.0
-// @description     A comprehensive file server API built with Go. It supports file and folder management, sharing, real-time updates via WebSockets, and more. All protected endpoints require a Bearer Token for authorization.
+// @description     A comprehensive file server API built with Go. It supports file and folder management, sharing, real-time updates via WebSockets, and more. All protected endpoints require a Bearer Token for authorization. The API implements rate limiting: most routes are limited to 60 requests/second per IP, with stricter limits on login endpoints.
 // @schemes         http https
 // @BasePath        /api/v1
 // @securityDefinitions.apikey BearerAuth

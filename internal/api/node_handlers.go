@@ -49,7 +49,7 @@ func (s *Server) generateUniqueID(ctx context.Context) (string, error) {
 // @Security     BearerAuth
 // @Param        folderRequest  body      CreateFolderRequest  true  "Folder details"
 // @Success      201            {object}  models.RichNode
-// @Failure      400            {string}  string "Bad Request"
+// @Failure      400            {string}  string "Bad Request - Folder name cannot be empty"
 // @Failure      401            {string}  string "Unauthorized"
 // @Failure      403            {string}  string "Forbidden - Write permission denied"
 // @Failure      404            {string}  string "Not Found - Parent folder not found"
@@ -161,12 +161,12 @@ func (s *Server) CreateFolderHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(richNode)
 }
 
-// @Summary      List user's own nodes
-// @Description  Lists the user's own files and folders in a specified parent folder or in the root directory.
+// @Summary      List nodes in a folder
+// @Description  Lists the files and folders within a specified parent folder. For a user's own items, this lists their content. For items shared with the user, it lists the content of a shared folder. To list items in the root directory of a user's own space, omit the 'parent_id'.
 // @Tags         nodes
 // @Produce      json
 // @Security     BearerAuth
-// @Param        parent_id  query     string  false  "ID of the parent folder to list. Omit for root."
+// @Param        parent_id  query     string  false  "ID of the parent folder to list. Omit for user's own root."
 // @Param        limit      query     int     false  "Number of items to return" default(100)
 // @Param        offset     query     int     false  "Offset for pagination" default(0)
 // @Param        sort       query     string  false  "Sort order. Comma-separated list of fields. Use '-' for descending. E.g., 'type,-name'"
@@ -388,7 +388,7 @@ func (s *Server) UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 // @Success      200      {file}    binary  "The file content"
 // @Failure      400      {string}  string "Bad Request - Cannot download a folder"
 // @Failure      401      {string}  string "Unauthorized"
-// @Failure      404      {string}  string "Not Found"
+// @Failure      404      {string}  string "Not Found - File not found or access denied"
 // @Failure      429      {string}  string "Too Many Requests"
 // @Failure      500      {string}  string "Internal Server Error"
 // @Router       /nodes/{nodeId}/download [get]
@@ -444,7 +444,7 @@ func (s *Server) DownloadFileHandler(w http.ResponseWriter, r *http.Request) {
 // @Success      204      {null}    nil     "No Content"
 // @Failure      401      {string}  string "Unauthorized"
 // @Failure      403      {string}  string "Forbidden - Write permission denied"
-// @Failure      404      {string}  string "Not Found"
+// @Failure      404      {string}  string "Not Found - Node not found or access denied"
 // @Failure      429      {string}  string "Too Many Requests"
 // @Failure      500      {string}  string "Internal Server Error"
 // @Router       /nodes/{nodeId} [delete]
@@ -540,8 +540,8 @@ func (s *Server) DeleteNodeHandler(w http.ResponseWriter, r *http.Request) {
 // @Failure      400            {string}  string "Bad Request - Invalid operation (e.g., moving between owners, circular move)"
 // @Failure      401            {string}  string "Unauthorized"
 // @Failure      403            {string}  string "Forbidden - Write permission denied"
-// @Failure      404            {string}  string "Not Found"
-// @Failure      409            {string}  string "Conflict"
+// @Failure      404            {string}  string "Not Found - Node or target folder not found"
+// @Failure      409            {string}  string "Conflict - A node with the same name already exists in the target location"
 // @Failure      429            {string}  string "Too Many Requests"
 // @Failure      500            {string}  string "Internal Server Error"
 // @Router       /nodes/{nodeId} [patch]
@@ -752,9 +752,9 @@ func (s *Server) UpdateNodeHandler(w http.ResponseWriter, r *http.Request) {
 // @Security     BearerAuth
 // @Param        ids    query     string  true  "Comma-separated list of Node IDs to include in the archive"
 // @Success      200    {file}    binary  "The ZIP archive content"
-// @Failure      400    {string}  string "Bad Request"
+// @Failure      400    {string}  string "Bad Request - Node IDs are required"
 // @Failure      401    {string}  string "Unauthorized"
-// @Failure      404    {string}  string "Not Found - one of the nodes does not exist"
+// @Failure      404    {string}  string "Not Found - One or more nodes not found or access denied"
 // @Failure      429    {string}  string "Too Many Requests"
 // @Failure      500    {string}  string "Internal Server Error"
 // @Router       /nodes/archive [get]
@@ -850,7 +850,7 @@ func (s *Server) DownloadArchiveHandler(w http.ResponseWriter, r *http.Request) 
 // @Success      201           {object}  models.RichNode
 // @Failure      400           {string}  string "Bad Request"
 // @Failure      401           {string}  string "Unauthorized"
-// @Failure      403           {string}  string "Forbidden - Write permission denied"
+// @Failure      403           {string}  string "Forbidden - Write permission denied in target location"
 // @Failure      404           {string}  string "Not Found - Source or destination not found"
 // @Failure      409           {string}  string "Conflict - A node with the same name already exists in the target location"
 // @Failure      413           {string}  string "Payload Too Large - Not enough storage space"
@@ -1081,7 +1081,7 @@ func (s *Server) CopyNodeHandler(w http.ResponseWriter, r *http.Request) {
 // @Param        share_context  query     string  false  "The ID of the root shared node, used to calculate relative paths for breadcrumbs."
 // @Success      200      {object}  NodeDetailResponse
 // @Failure      401      {string}  string "Unauthorized"
-// @Failure      404      {string}  string "Not Found"
+// @Failure      404      {string}  string "Not Found - Node not found or access denied"
 // @Failure      429      {string}  string "Too Many Requests"
 // @Failure      500      {string}  string "Internal Server Error"
 // @Router       /nodes/{nodeId} [get]

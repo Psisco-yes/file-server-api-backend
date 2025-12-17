@@ -1,16 +1,8 @@
 {
-    "schemes": [
-        "http",
-        "https"
-    ],
     "swagger": "2.0",
     "info": {
-        "description": "A comprehensive file server API built with Go. It supports file and folder management, sharing, real-time updates via WebSockets, and more. All protected endpoints require a Bearer Token for authorization.",
-        "title": "File Server API",
-        "contact": {},
-        "version": "1.0"
+        "contact": {}
     },
-    "basePath": "/api/v1",
     "paths": {
         "/auth/login": {
             "post": {
@@ -51,6 +43,12 @@
                     },
                     "401": {
                         "description": "Invalid username or password",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests - Limit: 10 requests per minute.",
                         "schema": {
                             "type": "string"
                         }
@@ -107,6 +105,12 @@
                             "type": "string"
                         }
                     },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -150,13 +154,19 @@
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad Request - Invalid 'since' parameter",
                         "schema": {
                             "type": "string"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -194,6 +204,12 @@
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -260,6 +276,12 @@
                             "type": "string"
                         }
                     },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -293,6 +315,12 @@
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -352,6 +380,12 @@
                             "type": "string"
                         }
                     },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -406,6 +440,12 @@
                             "type": "string"
                         }
                     },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -422,18 +462,18 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Lists the user's own files and folders in a specified parent folder or in the root directory.",
+                "description": "Lists the files and folders within a specified parent folder. For a user's own items, this lists their content. For items shared with the user, it lists the content of a shared folder. To list items in the root directory of a user's own space, omit the 'parent_id'.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "nodes"
                 ],
-                "summary": "List user's own nodes",
+                "summary": "List nodes in a folder",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "ID of the parent folder to list. Omit for root.",
+                        "description": "ID of the parent folder to list. Omit for user's own root.",
                         "name": "parent_id",
                         "in": "query"
                     },
@@ -470,6 +510,12 @@
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -515,7 +561,7 @@
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad Request - Node IDs are required",
                         "schema": {
                             "type": "string"
                         }
@@ -527,7 +573,13 @@
                         }
                     },
                     "404": {
-                        "description": "Not Found - one of the nodes does not exist",
+                        "description": "Not Found - One or more nodes not found or access denied",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -614,6 +666,12 @@
                             "type": "string"
                         }
                     },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -660,7 +718,7 @@
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad Request - Folder name cannot be empty",
                         "schema": {
                             "type": "string"
                         }
@@ -685,6 +743,12 @@
                     },
                     "409": {
                         "description": "Conflict - a folder with the same name already exists",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -764,6 +828,12 @@
                             "type": "string"
                         }
                     },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -780,7 +850,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Uploads a single chunk of a file for a given upload_id. The 'Content-Range' header is required for all chunks except the last one if its size is less than chunk size.",
+                "description": "Uploads a single chunk of a file for a given upload_id. The 'Content-Range' header is required.",
                 "consumes": [
                     "application/octet-stream"
                 ],
@@ -800,7 +870,8 @@
                         "type": "string",
                         "description": "Indicates the byte range of the chunk (e.g., 'bytes 0-1048575/4194304')",
                         "name": "Content-Range",
-                        "in": "header"
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -811,7 +882,7 @@
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad Request - Invalid Content-Range header",
                         "schema": {
                             "type": "string"
                         }
@@ -822,14 +893,26 @@
                             "type": "string"
                         }
                     },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "404": {
-                        "description": "Not Found",
+                        "description": "Not Found - Upload session not found",
                         "schema": {
                             "type": "string"
                         }
                     },
                     "416": {
-                        "description": "Range Not Satisfiable",
+                        "description": "Range Not Satisfiable - The chunk's start byte does not match the expected offset",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -886,8 +969,20 @@
                             "type": "string"
                         }
                     },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "404": {
-                        "description": "Not Found",
+                        "description": "Not Found - Upload session not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -945,7 +1040,13 @@
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "Not Found - Node not found or access denied",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -998,7 +1099,13 @@
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "Not Found - Node not found or access denied",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -1072,13 +1179,19 @@
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "Not Found - Node or target folder not found",
                         "schema": {
                             "type": "string"
                         }
                     },
                     "409": {
-                        "description": "Conflict",
+                        "description": "Conflict - A node with the same name already exists in the target location",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -1148,7 +1261,7 @@
                         }
                     },
                     "403": {
-                        "description": "Forbidden - Write permission denied",
+                        "description": "Forbidden - Write permission denied in target location",
                         "schema": {
                             "type": "string"
                         }
@@ -1167,6 +1280,12 @@
                     },
                     "413": {
                         "description": "Payload Too Large - Not enough storage space",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -1224,7 +1343,13 @@
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "Not Found - File not found or access denied",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -1284,6 +1409,12 @@
                             "type": "string"
                         }
                     },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -1325,6 +1456,12 @@
                             "type": "string"
                         }
                     },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -1341,7 +1478,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Restores a file or folder (and all of its contents) from the trash to its original location. Fails if a node with the same name already exists in the target location.",
+                "description": "Restores a file or folder (and all of its contents) from the trash to its original location. Fails if a node with the same name already exists in the target location, unless 'renameOnConflict' is true.",
                 "produces": [
                     "application/json"
                 ],
@@ -1378,13 +1515,19 @@
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "Not Found - Node not found in trash",
                         "schema": {
                             "type": "string"
                         }
                     },
                     "409": {
                         "description": "Conflict - a node with the same name already exists in the original location",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -1442,7 +1585,7 @@
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad Request - Invalid request or cannot share with oneself",
                         "schema": {
                             "type": "string"
                         }
@@ -1461,6 +1604,12 @@
                     },
                     "409": {
                         "description": "Conflict - Node is already shared with this user",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -1529,13 +1678,19 @@
                         }
                     },
                     "400": {
-                        "description": "Bad Request - Missing query",
+                        "description": "Bad Request - Missing query parameter 'q'",
                         "schema": {
                             "type": "string"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -1580,6 +1735,12 @@
                             "type": "string"
                         }
                     },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -1610,6 +1771,12 @@
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -1664,6 +1831,18 @@
                             "type": "string"
                         }
                     },
+                    "404": {
+                        "description": "Not Found - Session does not exist or does not belong to the user",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -1680,7 +1859,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Lists files and folders shared with the current user by a specific sharer. Can list the root of shared items or the content of a subfolder.",
+                "description": "Lists files and folders shared with the current user by a specific sharer. Can list the root of shared items (by omitting parent_id) or the content of a shared subfolder (by providing its parent_id).",
                 "produces": [
                     "application/json"
                 ],
@@ -1734,7 +1913,7 @@
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad Request - Missing sharer_username",
                         "schema": {
                             "type": "string"
                         }
@@ -1746,7 +1925,13 @@
                         }
                     },
                     "404": {
-                        "description": "Not Found or access denied",
+                        "description": "Not Found - Sharer or folder not found, or access denied",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -1787,6 +1972,12 @@
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -1853,6 +2044,12 @@
                             "type": "string"
                         }
                     },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -1891,7 +2088,7 @@
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad Request - Invalid share ID",
                         "schema": {
                             "type": "string"
                         }
@@ -1903,7 +2100,13 @@
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "Not Found - Share not found or you are not the owner",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -1970,6 +2173,12 @@
                             "type": "string"
                         }
                     },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -2000,6 +2209,12 @@
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "string"
                         }
@@ -2053,6 +2268,12 @@
                             "type": "string"
                         }
                     },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -2090,6 +2311,12 @@
                         "schema": {
                             "type": "string"
                         }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 }
             }
@@ -2114,11 +2341,11 @@
             "properties": {
                 "new_name": {
                     "type": "string",
-                    "example": "Kopia Raportu"
+                    "example": "Kopia Raportu Q3"
                 },
                 "parent_id": {
                     "type": "string",
-                    "example": "target_folder_id"
+                    "example": "fLW5kAh2ia9vYmjMnU4nZ"
                 }
             }
         },
@@ -2139,7 +2366,8 @@
             "type": "object",
             "properties": {
                 "event_time": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "2025-12-01T16:30:00Z"
                 },
                 "event_type": {
                     "type": "string",
@@ -2150,7 +2378,8 @@
                     "example": 123
                 },
                 "payload": {
-                    "type": "object"
+                    "type": "string",
+                    "example": "{\"id\":\"new_node_123\",\"name\":\"New Document.docx\",\"node_type\":\"file\"}"
                 }
             }
         },
@@ -2158,16 +2387,20 @@
             "type": "object",
             "properties": {
                 "mime_type": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "application/zip"
                 },
                 "name": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "annual_report.zip"
                 },
                 "parent_id": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "_vx2a-43VqRT5wz_s9u4"
                 },
                 "size": {
-                    "type": "integer"
+                    "type": "integer",
+                    "example": 1073741824
                 }
             }
         },
@@ -2175,7 +2408,8 @@
             "type": "object",
             "properties": {
                 "upload_id": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "a1b2c3d4-e5f6-7890-1234-567890abcdef"
                 }
             }
         },
@@ -2270,7 +2504,7 @@
             "properties": {
                 "refresh_token": {
                     "type": "string",
-                    "example": "V1StGXR8_Z5jdHi6B-myT78q..."
+                    "example": "V1StGXR8_Z5jdHi6B-myT78qBTw_In4s-Wp-s_3_F3g"
                 }
             }
         },
@@ -2290,7 +2524,8 @@
                     "example": "user2"
                 },
                 "shared_at": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "2025-12-01T15:04:05Z"
                 }
             }
         },
@@ -2331,7 +2566,8 @@
                     "example": 2
                 },
                 "shared_at": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "2025-12-01T15:04:05Z"
                 },
                 "sharer_id": {
                     "type": "integer",
@@ -2361,11 +2597,11 @@
             "properties": {
                 "access_token": {
                     "type": "string",
-                    "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJ1c2VybmFtZSI6ImFkbWluIiwiZXhwIjoxNzM0NTQ3MjAwfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
                 },
                 "refresh_token": {
                     "type": "string",
-                    "example": "V1StGXR8_Z5jdHi6B-myT78q..."
+                    "example": "V1StGXR8_Z5jdHi6B-myT78qBTw_In4s-Wp-s_3_F3g"
                 }
             }
         },
@@ -2374,7 +2610,7 @@
             "properties": {
                 "display_name": {
                     "type": "string",
-                    "example": "Jan Kowalski"
+                    "example": "Adam Nowak"
                 }
             }
         },
@@ -2383,11 +2619,11 @@
             "properties": {
                 "name": {
                     "type": "string",
-                    "example": "Nowa Nazwa Pliku"
+                    "example": "Zmieniona Nazwa Pliku"
                 },
                 "parent_id": {
                     "type": "string",
-                    "example": "bNowyFolderRodzic123"
+                    "example": "fLW5kAh2ia9vYmjMnU4nZ"
                 }
             }
         },
@@ -2505,13 +2741,6 @@
                     "type": "string"
                 }
             }
-        }
-    },
-    "securityDefinitions": {
-        "BearerAuth": {
-            "type": "apiKey",
-            "name": "Authorization",
-            "in": "header"
         }
     }
 }

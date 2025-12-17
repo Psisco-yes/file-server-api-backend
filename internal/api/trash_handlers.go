@@ -84,15 +84,15 @@ func (s *Server) ListTrashHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary      Restore a node from trash
-// @Description  Restores a file or folder (and all of its contents) from the trash to its original location. Fails if a node with the same name already exists in the target location.
+// @Description  Restores a file or folder (and all of its contents) from the trash to its original location. Fails if a node with the same name already exists in the target location, unless 'renameOnConflict' is true.
 // @Tags         nodes
 // @Produce      json
 // @Security     BearerAuth
 // @Param        nodeId   path      string  true  "Node ID to restore"
-// @Param        renameOnConflict query     boolean false "If true, renames the node (e.g., 'file (1).txt') on conflict instead of failing."
+// @Param        renameOnConflict query   boolean false "If true, renames the node (e.g., 'file (1).txt') on conflict instead of failing."
 // @Success      200      {object}  models.RichNode
 // @Failure      401      {string}  string "Unauthorized"
-// @Failure      404      {string}  string "Not Found"
+// @Failure      404      {string}  string "Not Found - Node not found in trash"
 // @Failure      409      {string}  string "Conflict - a node with the same name already exists in the original location"
 // @Failure      429      {string}  string "Too Many Requests"
 // @Failure      500      {string}  string "Internal Server Error"
@@ -178,7 +178,7 @@ func (s *Server) RestoreNodeHandler(w http.ResponseWriter, r *http.Request) {
 // @Success      204      {null}    nil     "No Content"
 // @Failure      401      {string}  string  "Unauthorized"
 // @Failure      404      {string}  string  "Not Found - Node not found in trash"
-// @Failure      429      {string}  string "Too Many Requests"
+// @Failure      429      {string}  string  "Too Many Requests"
 // @Failure      500      {string}  string  "Internal Server Error"
 // @Router       /trash/{nodeId} [delete]
 func (s *Server) PurgeSingleNodeHandler(w http.ResponseWriter, r *http.Request) {

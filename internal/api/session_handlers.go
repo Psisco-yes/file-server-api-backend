@@ -41,6 +41,7 @@ func (s *Server) ListSessionsHandler(w http.ResponseWriter, r *http.Request) {
 // @Success      204        {null}    nil     "No Content"
 // @Failure      400        {string}  string "Bad Request - Invalid session ID format"
 // @Failure      401        {string}  string "Unauthorized"
+// @Failure      404        {string}  string "Not Found - Session does not exist or does not belong to the user"
 // @Failure      429        {string}  string "Too Many Requests"
 // @Failure      500        {string}  string "Internal Server Error"
 // @Router       /sessions/{sessionId} [delete]
