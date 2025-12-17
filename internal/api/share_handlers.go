@@ -211,7 +211,7 @@ func (s *Server) ListSharedNodesHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	nodes, err := s.store.GetRichNodesByParentID(r.Context(), sharer.ID, claims.UserID, &parentIDStr, limit, offset, sort)
+	nodes, err := s.store.GetRichNodesByParentID(r.Context(), sharer.ID, claims.UserID, &parentIDStr, limit, offset, sort, "")
 	if err != nil {
 		log.Printf("ERROR: Failed to list children for shared node %s: %v", parentIDStr, err)
 		http.Error(w, "Failed to list shared nodes content", http.StatusInternalServerError)
@@ -316,6 +316,70 @@ func (s *Server) ListOutgoingSharedNodesHandler(w http.ResponseWriter, r *http.R
 	nodes, err := s.store.GetRichOutgoingSharedNodes(r.Context(), claims.UserID, limit, offset, sort)
 	if err != nil {
 		http.Error(w, "Failed to retrieve outgoing shared nodes", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(nodes)
+}
+
+// @Summary      List writeable shared folders
+// @Description  Retrieves a list of folders shared by a specific user to which you have write access. This is primarily used for building a folder tree in a "Move to..." or "Copy to..." dialog within a shared context. It allows navigation by providing a `parent_id`.
+// @Tags         shares
+// @Produce      json
+// @Security     BearerAuth
+// @Param        sharer_username  query     string  true   "Username of the person who owns the shared content"
+// @Param        parent_id        query     string  false  "The ID of the parent shared folder to list. Omit for the root level of folders you have write-access to from this user."
+// @Success      200              {array}   models.RichNode
+// @Failure      400              {string}  string  "Bad Request - Missing 'sharer_username' parameter"
+// @Failure      401              {string}  string  "Unauthorized"
+// @Failure      403              {string}  string  "Forbidden - You have read-only access to the parent folder"
+// @Failure      404              {string}  string  "Not Found - Sharer user not found, or parent folder not found/access denied"
+// @Failure      429              {string}  string  "Too Many Requests"
+// @Failure      500              {string}  string  "Internal Server Error"
+// @Router       /shares/incoming/writeable-folders [get]
+func (s *Server) ListWriteableSharedFoldersHandler(w http.ResponseWriter, r *http.Request) {
+	claims := GetUserFromContext(r.Context())
+
+	sharerUsername := r.URL.Query().Get("sharer_username")
+	if sharerUsername == "" {
+		http.Error(w, "'sharer_username' query parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	sharer, err := s.store.GetUserByUsername(r.Context(), sharerUsername)
+	if err != nil {
+		http.Error(w, "Failed to find sharer user", http.StatusInternalServerError)
+		return
+	}
+	if sharer == nil {
+		http.Error(w, "Sharer user not found", http.StatusNotFound)
+		return
+	}
+
+	parentIDStr := r.URL.Query().Get("parent_id")
+	var parentID *string
+	if parentIDStr != "" {
+		hasWrite, err := s.store.CheckWritePermission(r.Context(), claims.UserID, &parentIDStr)
+		if err != nil {
+			http.Error(w, "Failed to verify parent folder permissions", http.StatusInternalServerError)
+			return
+		}
+		if !hasWrite {
+			parent, _ := s.store.GetNodeIfAccessible(r.Context(), parentIDStr, claims.UserID)
+			if parent == nil {
+				http.Error(w, "Parent folder not found or access denied", http.StatusNotFound)
+				return
+			}
+			http.Error(w, "Access denied: you do not have write permission for the parent folder", http.StatusForbidden)
+			return
+		}
+		parentID = &parentIDStr
+	}
+
+	nodes, err := s.store.GetRichWriteableSharedFolders(r.Context(), claims.UserID, sharer.ID, parentID)
+	if err != nil {
+		http.Error(w, "Failed to retrieve writeable shared folders", http.StatusInternalServerError)
 		return
 	}
 

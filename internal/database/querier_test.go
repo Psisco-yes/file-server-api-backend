@@ -1013,7 +1013,7 @@ func TestGetRichNodesByParentID(t *testing.T) {
 
 	plainFile := createTestNode(t, CreateNodeParams{ID: "rich_plain_file", OwnerID: owner.ID, Name: "My Plain", NodeType: "file"})
 
-	nodes, err := testStore.GetRichNodesByParentID(context.Background(), owner.ID, owner.ID, nil, 10, 0, "")
+	nodes, err := testStore.GetRichNodesByParentID(context.Background(), owner.ID, owner.ID, nil, 10, 0, "", "")
 	require.NoError(t, err)
 	require.Len(t, nodes, 3, "Should find 3 nodes in the root for the owner")
 
@@ -1270,4 +1270,45 @@ func TestGetSubtree(t *testing.T) {
 	require.True(t, foundIDs[otherChildFile.ID])
 	require.False(t, foundIDs[rootFolder.ID], "Subtree should not include the root node itself")
 	require.False(t, foundIDs[unrelatedFolder.ID], "Subtree should not include unrelated nodes")
+}
+
+func TestGetRichWriteableSharedFolders(t *testing.T) {
+	sharer := createTestUser(t, "user_q_writeable")
+	recipient := createTestUser(t, "recipient_q_writeable")
+
+	writeRootFolder := createTestNode(t, CreateNodeParams{ID: "q_write_root", OwnerID: sharer.ID, Name: "Write Root", NodeType: "folder"})
+	createTestShare(t, ShareNodeParams{NodeID: writeRootFolder.ID, SharerID: sharer.ID, RecipientID: recipient.ID, Permissions: "write"})
+
+	readRootFolder := createTestNode(t, CreateNodeParams{ID: "q_read_root", OwnerID: sharer.ID, Name: "Read Root", NodeType: "folder"})
+	createTestShare(t, ShareNodeParams{NodeID: readRootFolder.ID, SharerID: sharer.ID, RecipientID: recipient.ID, Permissions: "read"})
+
+	createTestNode(t, CreateNodeParams{ID: "q_sub_in_write", OwnerID: sharer.ID, ParentID: &writeRootFolder.ID, Name: "Subfolder", NodeType: "folder"})
+
+	createTestNode(t, CreateNodeParams{ID: "q_file_in_write", OwnerID: sharer.ID, ParentID: &writeRootFolder.ID, Name: "File.txt", NodeType: "file"})
+
+	t.Run("lists writeable folders at the root level", func(t *testing.T) {
+		folders, err := testStore.GetRichWriteableSharedFolders(context.Background(), recipient.ID, sharer.ID, nil)
+		require.NoError(t, err)
+
+		require.Len(t, folders, 1, "Should only find the one folder shared with 'write' permission at the root")
+		require.Equal(t, "Write Root", folders[0].Name)
+		require.NotNil(t, folders[0].Permissions)
+		require.Equal(t, "write", *folders[0].Permissions)
+	})
+
+	t.Run("lists subfolders inside a writeable shared folder", func(t *testing.T) {
+		folders, err := testStore.GetRichWriteableSharedFolders(context.Background(), recipient.ID, sharer.ID, &writeRootFolder.ID)
+		require.NoError(t, err)
+
+		require.Len(t, folders, 1, "Should find the subfolder inside the writeable share")
+		require.Equal(t, "Subfolder", folders[0].Name)
+		require.NotNil(t, folders[0].Permissions)
+		require.Equal(t, "write", *folders[0].Permissions, "Subfolder should inherit 'write' permission")
+	})
+
+	t.Run("returns empty list for a read-only folder", func(t *testing.T) {
+		folders, err := testStore.GetRichWriteableSharedFolders(context.Background(), recipient.ID, sharer.ID, &readRootFolder.ID)
+		require.NoError(t, err)
+		require.Len(t, folders, 0, "Should not list any writeable folders inside a read-only share")
+	})
 }

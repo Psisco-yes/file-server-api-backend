@@ -1,3 +1,4 @@
+basePath: /api/v1
 definitions:
   internal_api.ChangePasswordRequest:
     properties:
@@ -294,6 +295,13 @@ definitions:
     type: object
 info:
   contact: {}
+  description: 'A comprehensive file server API built with Go. It supports file and
+    folder management, sharing, real-time updates via WebSockets, and more. All protected
+    endpoints require a Bearer Token for authorization. The API implements rate limiting:
+    most routes are limited to 60 requests/second per IP, with stricter limits on
+    login endpoints.'
+  title: File Server API
+  version: "1.0"
 paths:
   /auth/login:
     post:
@@ -600,14 +608,21 @@ paths:
       - users
   /nodes:
     get:
-      description: Lists the files and folders within a specified parent folder. For
-        a user's own items, this lists their content. For items shared with the user,
-        it lists the content of a shared folder. To list items in the root directory
-        of a user's own space, omit the 'parent_id'.
+      description: Lists the user's own files and folders. This can be used to list
+        items in the user's root directory (by omitting `parent_id`) or the contents
+        of a specific subfolder they own. To browse content shared with you by others,
+        use the `/shares/incoming/nodes` endpoint instead.
       parameters:
       - description: ID of the parent folder to list. Omit for user's own root.
         in: query
         name: parent_id
+        type: string
+      - description: Filter results by node type.
+        enum:
+        - file
+        - folder
+        in: query
+        name: filter
         type: string
       - default: 100
         description: Number of items to return
@@ -647,7 +662,7 @@ paths:
             type: string
       security:
       - BearerAuth: []
-      summary: List nodes in a folder
+      summary: List user's own nodes
       tags:
       - nodes
   /nodes/{nodeId}:
@@ -1678,6 +1693,62 @@ paths:
       summary: List users who shared with me
       tags:
       - shares
+  /shares/incoming/writeable-folders:
+    get:
+      description: Retrieves a list of folders shared by a specific user to which
+        you have write access. This is primarily used for building a folder tree in
+        a "Move to..." or "Copy to..." dialog within a shared context. It allows navigation
+        by providing a `parent_id`.
+      parameters:
+      - description: Username of the person who owns the shared content
+        in: query
+        name: sharer_username
+        required: true
+        type: string
+      - description: The ID of the parent shared folder to list. Omit for the root
+          level of folders you have write-access to from this user.
+        in: query
+        name: parent_id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/serwer-plikow_internal_models.RichNode'
+            type: array
+        "400":
+          description: Bad Request - Missing 'sharer_username' parameter
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "403":
+          description: Forbidden - You have read-only access to the parent folder
+          schema:
+            type: string
+        "404":
+          description: Not Found - Sharer user not found, or parent folder not found/access
+            denied
+          schema:
+            type: string
+        "429":
+          description: Too Many Requests
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: List writeable shared folders
+      tags:
+      - shares
   /shares/outgoing/nodes:
     get:
       description: Gets a paginated and sortable list of unique nodes (files and folders)
@@ -1858,4 +1929,12 @@ paths:
       summary: Establish WebSocket connection
       tags:
       - websocket
+schemes:
+- http
+- https
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
 swagger: "2.0"

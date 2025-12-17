@@ -6,7 +6,6 @@
 // @securityDefinitions.apikey BearerAuth
 // @in header
 // @name Authorization
-// @response 429 {string} string "Too Many Requests"
 package main
 
 import (
@@ -140,6 +139,7 @@ func main() {
 			r.Route("/shares", func(r chi.Router) {
 				r.Get("/incoming/users", server.ListSharingUsersHandler)
 				r.Get("/incoming/nodes", server.ListSharedNodesHandler)
+				r.Get("/incoming/writeable-folders", server.ListWriteableSharedFoldersHandler)
 				r.Get("/outgoing/nodes", server.ListOutgoingSharedNodesHandler)
 				r.Delete("/{shareId}", server.DeleteShareHandler)
 			})

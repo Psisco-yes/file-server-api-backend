@@ -1314,11 +1314,16 @@ func (q *Queries) GetRichNodeIfAccessible(ctx context.Context, nodeID string, us
 	return nil, nil
 }
 
-func (q *Queries) GetRichNodesByParentID(ctx context.Context, ownerID int64, requesterID int64, parentID *string, limit int, offset int, sort string) ([]*models.RichNode, error) {
+func (q *Queries) GetRichNodesByParentID(ctx context.Context, ownerID int64, requesterID int64, parentID *string, limit int, offset int, sort string, filter string) ([]*models.RichNode, error) {
 	var query string
 	var args []interface{}
 
 	orderByClause := buildOrderByClause(sort)
+
+	filterClause := ""
+	if filter == "foldersOnly" {
+		filterClause = "AND n.node_type = 'folder'"
+	}
 
 	baseQuery := fmt.Sprintf(`
 		SELECT %s
@@ -1330,12 +1335,12 @@ func (q *Queries) GetRichNodesByParentID(ctx context.Context, ownerID int64, req
 	args = append(args, requesterID)
 
 	if parentID == nil {
-		query = fmt.Sprintf(`%s WHERE n.owner_id = $2 AND n.parent_id IS NULL AND n.deleted_at IS NULL
-                             %s LIMIT $3 OFFSET $4`, baseQuery, orderByClause)
+		query = fmt.Sprintf(`%s WHERE n.owner_id = $2 AND n.parent_id IS NULL AND n.deleted_at IS NULL %s
+                             %s LIMIT $3 OFFSET $4`, baseQuery, filterClause, orderByClause)
 		args = append(args, ownerID, limit, offset)
 	} else {
-		query = fmt.Sprintf(`%s WHERE n.owner_id = $2 AND n.parent_id = $3 AND n.deleted_at IS NULL
-                             %s LIMIT $4 OFFSET $5`, baseQuery, orderByClause)
+		query = fmt.Sprintf(`%s WHERE n.owner_id = $2 AND n.parent_id = $3 AND n.deleted_at IS NULL %s
+                             %s LIMIT $4 OFFSET $5`, baseQuery, filterClause, orderByClause)
 		args = append(args, ownerID, *parentID, limit, offset)
 	}
 
@@ -1715,6 +1720,55 @@ func (q *Queries) GetRichOutgoingSharedNodes(ctx context.Context, sharerID int64
 	`, richNodeFields, orderByClause)
 
 	rows, err := q.db.Query(ctx, query, sharerID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var nodes []*models.RichNode
+	for rows.Next() {
+		node, err := scanRichNode(rows)
+		if err != nil {
+			return nil, err
+		}
+		nodes = append(nodes, node)
+	}
+
+	if nodes == nil {
+		return []*models.RichNode{}, nil
+	}
+
+	return nodes, nil
+}
+
+func (q *Queries) GetRichWriteableSharedFolders(ctx context.Context, recipientID int64, sharerID int64, parentID *string) ([]*models.RichNode, error) {
+	var query string
+	var args []interface{}
+
+	baseQuery := fmt.Sprintf(`
+		SELECT %s
+		FROM nodes n
+		JOIN users u ON n.owner_id = u.id
+		LEFT JOIN user_favorites fav ON n.id = fav.node_id AND fav.user_id = $1
+	`, richNodeFields)
+
+	args = append(args, recipientID, sharerID)
+
+	var whereClauses []string
+	whereClauses = append(whereClauses, "n.owner_id = $2", "n.node_type = 'folder'", "n.deleted_at IS NULL")
+
+	if parentID == nil {
+		whereClauses = append(whereClauses, "n.id IN (SELECT node_id FROM shares WHERE recipient_id = $1 AND sharer_id = $2 AND permissions = 'write')")
+	} else {
+		whereClauses = append(whereClauses, "n.parent_id = $3")
+		args = append(args, *parentID)
+	}
+
+	orderByClause := "ORDER BY n.name ASC"
+
+	query = fmt.Sprintf("%s WHERE %s %s", baseQuery, strings.Join(whereClauses, " AND "), orderByClause)
+
+	rows, err := q.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

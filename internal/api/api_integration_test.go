@@ -1273,7 +1273,7 @@ func TestCopyNodeHandler_Integration(t *testing.T) {
 		require.Equal(t, newName, copiedFolder.Name)
 		require.Equal(t, user.Username, copiedFolder.Owner.Username)
 
-		children, err := testServer.store.GetRichNodesByParentID(context.Background(), user.ID, user.ID, &copiedFolder.ID, 10, 0, "")
+		children, err := testServer.store.GetRichNodesByParentID(context.Background(), user.ID, user.ID, &copiedFolder.ID, 10, 0, "", "")
 		require.NoError(t, err)
 		require.Len(t, children, 1)
 		require.Equal(t, "wewnetrzny.txt", children[0].Name)
@@ -2072,5 +2072,72 @@ func TestRateLimiting(t *testing.T) {
 		rrAfterWait := httptest.NewRecorder()
 		router.ServeHTTP(rrAfterWait, reqAfterWait)
 		require.NotEqual(t, http.StatusTooManyRequests, rrAfterWait.Code, "Request after waiting period should be allowed")
+	})
+}
+
+func TestListWriteableSharedFoldersHandler(t *testing.T) {
+	sharer := createTestUserWithPassword(t, "user_api_writeable", "password")
+	recipient := createTestUserWithPassword(t, "recipient_api_writeable", "password")
+	loginResp := loginUserForTest(t, "recipient_api_writeable", "password")
+
+	writeFolder, _ := createTestNodeAPI(t, "API Writeable", "folder", nil, sharer.ID)
+	readFolder, _ := createTestNodeAPI(t, "API Readable", "folder", nil, sharer.ID)
+	createTestNodeAPI(t, "API Subfolder", "folder", &writeFolder.ID, sharer.ID)
+
+	testServer.store.ShareNode(context.Background(), database.ShareNodeParams{NodeID: writeFolder.ID, SharerID: sharer.ID, RecipientID: recipient.ID, Permissions: "write"})
+	testServer.store.ShareNode(context.Background(), database.ShareNodeParams{NodeID: readFolder.ID, SharerID: sharer.ID, RecipientID: recipient.ID, Permissions: "read"})
+
+	router := chi.NewRouter()
+	router.Use(testServer.AuthMiddleware)
+	router.Get("/api/v1/shares/incoming/writeable-folders", testServer.ListWriteableSharedFoldersHandler)
+
+	t.Run("lists root writeable folders from a specific sharer", func(t *testing.T) {
+		url := fmt.Sprintf("/api/v1/shares/incoming/writeable-folders?sharer_username=%s", sharer.Username)
+		req := httptest.NewRequest("GET", url, nil)
+		req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusOK, rr.Code)
+		var nodes []*models.RichNode
+		json.Unmarshal(rr.Body.Bytes(), &nodes)
+
+		require.Len(t, nodes, 1)
+		require.Equal(t, "API Writeable", nodes[0].Name)
+	})
+
+	t.Run("lists subfolders within a writeable folder", func(t *testing.T) {
+		url := fmt.Sprintf("/api/v1/shares/incoming/writeable-folders?sharer_username=%s&parent_id=%s", sharer.Username, writeFolder.ID)
+		req := httptest.NewRequest("GET", url, nil)
+		req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusOK, rr.Code)
+		var nodes []*models.RichNode
+		json.Unmarshal(rr.Body.Bytes(), &nodes)
+
+		require.Len(t, nodes, 1)
+		require.Equal(t, "API Subfolder", nodes[0].Name)
+	})
+
+	t.Run("returns forbidden when trying to list content of a read-only folder", func(t *testing.T) {
+		url := fmt.Sprintf("/api/v1/shares/incoming/writeable-folders?sharer_username=%s&parent_id=%s", sharer.Username, readFolder.ID)
+		req := httptest.NewRequest("GET", url, nil)
+		req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusForbidden, rr.Code)
+	})
+
+	t.Run("returns not found for a non-existent parent folder", func(t *testing.T) {
+		url := fmt.Sprintf("/api/v1/shares/incoming/writeable-folders?sharer_username=%s&parent_id=non_existent_id_123", sharer.Username)
+		req := httptest.NewRequest("GET", url, nil)
+		req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusNotFound, rr.Code)
 	})
 }

@@ -473,19 +473,29 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Lists the files and folders within a specified parent folder. For a user's own items, this lists their content. For items shared with the user, it lists the content of a shared folder. To list items in the root directory of a user's own space, omit the 'parent_id'.",
+                "description": "Lists the user's own files and folders. This can be used to list items in the user's root directory (by omitting ` + "`" + `parent_id` + "`" + `) or the contents of a specific subfolder they own. To browse content shared with you by others, use the ` + "`" + `/shares/incoming/nodes` + "`" + ` endpoint instead.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "nodes"
                 ],
-                "summary": "List nodes in a folder",
+                "summary": "List user's own nodes",
                 "parameters": [
                     {
                         "type": "string",
                         "description": "ID of the parent folder to list. Omit for user's own root.",
                         "name": "parent_id",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "file",
+                            "folder"
+                        ],
+                        "type": "string",
+                        "description": "Filter results by node type.",
+                        "name": "filter",
                         "in": "query"
                     },
                     {
@@ -2002,6 +2012,85 @@ const docTemplate = `{
                 }
             }
         },
+        "/shares/incoming/writeable-folders": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieves a list of folders shared by a specific user to which you have write access. This is primarily used for building a folder tree in a \"Move to...\" or \"Copy to...\" dialog within a shared context. It allows navigation by providing a ` + "`" + `parent_id` + "`" + `.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "shares"
+                ],
+                "summary": "List writeable shared folders",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Username of the person who owns the shared content",
+                        "name": "sharer_username",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "The ID of the parent shared folder to list. Omit for the root level of folders you have write-access to from this user.",
+                        "name": "parent_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/serwer-plikow_internal_models.RichNode"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request - Missing 'sharer_username' parameter",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - You have read-only access to the parent folder",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found - Sharer user not found, or parent folder not found/access denied",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/shares/outgoing/nodes": {
             "get": {
                 "security": [
@@ -2753,17 +2842,24 @@ const docTemplate = `{
                 }
             }
         }
+    },
+    "securityDefinitions": {
+        "BearerAuth": {
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
+        }
     }
 }`
 
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
-	Version:          "",
+	Version:          "1.0",
 	Host:             "",
-	BasePath:         "",
-	Schemes:          []string{},
-	Title:            "",
-	Description:      "",
+	BasePath:         "/api/v1",
+	Schemes:          []string{"http", "https"},
+	Title:            "File Server API",
+	Description:      "A comprehensive file server API built with Go. It supports file and folder management, sharing, real-time updates via WebSockets, and more. All protected endpoints require a Bearer Token for authorization. The API implements rate limiting: most routes are limited to 60 requests/second per IP, with stricter limits on login endpoints.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

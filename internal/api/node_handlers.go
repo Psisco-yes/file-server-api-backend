@@ -161,12 +161,13 @@ func (s *Server) CreateFolderHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(richNode)
 }
 
-// @Summary      List nodes in a folder
-// @Description  Lists the files and folders within a specified parent folder. For a user's own items, this lists their content. For items shared with the user, it lists the content of a shared folder. To list items in the root directory of a user's own space, omit the 'parent_id'.
+// @Summary      List user's own nodes
+// @Description  Lists the user's own files and folders. This can be used to list items in the user's root directory (by omitting `parent_id`) or the contents of a specific subfolder they own. To browse content shared with you by others, use the `/shares/incoming/nodes` endpoint instead.
 // @Tags         nodes
 // @Produce      json
 // @Security     BearerAuth
 // @Param        parent_id  query     string  false  "ID of the parent folder to list. Omit for user's own root."
+// @Param        filter     query     string  false  "Filter results by node type." Enums(file, folder)
 // @Param        limit      query     int     false  "Number of items to return" default(100)
 // @Param        offset     query     int     false  "Offset for pagination" default(0)
 // @Param        sort       query     string  false  "Sort order. Comma-separated list of fields. Use '-' for descending. E.g., 'type,-name'"
@@ -180,6 +181,7 @@ func (s *Server) ListNodesHandler(w http.ResponseWriter, r *http.Request) {
 	limit, offset := parsePagination(r)
 
 	sort := r.URL.Query().Get("sort")
+	filter := r.URL.Query().Get("filter")
 
 	parentIDStr := r.URL.Query().Get("parent_id")
 	var parentID *string
@@ -187,7 +189,7 @@ func (s *Server) ListNodesHandler(w http.ResponseWriter, r *http.Request) {
 		parentID = &parentIDStr
 	}
 
-	nodes, err := s.store.GetRichNodesByParentID(r.Context(), claims.UserID, claims.UserID, parentID, limit, offset, sort)
+	nodes, err := s.store.GetRichNodesByParentID(r.Context(), claims.UserID, claims.UserID, parentID, limit, offset, sort, filter)
 	if err != nil {
 		log.Printf("ERROR: Failed to list own rich nodes for user %d: %v", claims.UserID, err)
 		http.Error(w, "Failed to list nodes", http.StatusInternalServerError)
