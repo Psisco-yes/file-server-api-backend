@@ -8,13 +8,13 @@ W pełni funkcjonalny, REST-owy serwer plików zbudowany w Go, inspirowany syste
 
 -   **Zaawansowane Zarządzanie Plikami:** Pełen zestaw operacji CRUD na plikach i folderach.
 -   **Obsługa Dużych Plików:** Wsparcie dla przesyłania bardzo dużych plików dzięki mechanizmowi "chunked uploads", z możliwością wznawiania.
--   **Sortowanie po Stronie Serwera:** Wszystkie endpointy listujące obsługują zaawansowane sortowanie wielokolumnowe (np. `?sort=type,-name`).
+-   **Sortowanie po Stronie Serwera:** Wszystkie endpointy listujące obsługują zaawansowane sortowanie wielokolumnowe.
 -   **Bezpieczeństwo:**
     *   **Uwierzytelnianie JWT:** Zabezpieczenie oparte na tokenach z rotacją i krótkim czasem życia `access token`.
     *   **Zarządzanie Sesjami:** Możliwość przeglądania i unieważniania aktywnych sesji.
     *   **HTTPS:** Domyślna obsługa szyfrowanego połączenia dzięki integracji z Caddy.
     *   **Rate Limiting:** Wbudowana ochrona przed atakami typu brute-force i DoS.
--   **Elastyczne Udostępnianie:** Możliwość udostępniania plików i folderów z uprawnieniami (`read`/`write`) i dziedziczeniem.
+-   **Elastyczne Udostępnianie:** Możliwość udostępniania plików i folderów z uprawnieniami, i dziedziczeniem.
 -   **Użyteczne Funkcje:**
     *   **Kosz:** Funkcjonalność "miękkiego usuwania" z opcją rekurencyjnego przywracania.
     *   **Ulubione:** Oznaczanie ważnych plików i folderów.
@@ -186,16 +186,6 @@ Wyświetla ogólne statystyki serwera.
 ```powershell
 .\system-stats.ps1
 ```
-
-### Przykłady Użycia
-
--   **Dodaj użytkownika:** `.\scripts\add-user.ps1 -Username "nowyuser" -Password "SuperT@jneHaslo1"`
--   **Usuń użytkownika:** `.\scripts\delete-user.ps1 -Username "nowyuser"`
--   **Zmień limit miejsca:** `.\scripts\change-quota.ps1 -Username "nowyuser" -QuotaGB 25`
--   **Resetuj hasło:** `.\scripts\reset-password.ps1 -Username "nowyuser" -NewPassword "NoweLepszeHaslo_456"`
--   **Listuj użytkowników:** `.\scripts\list-users.ps1`
--   **Wyloguj użytkownika:** `.\scripts\terminate-sessions.ps1 -Username "nowyuser"`
--   **Pokaż statystyki:** `.\scripts\system-stats.ps1`
 
 ---
 
