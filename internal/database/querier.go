@@ -1804,3 +1804,18 @@ func (q *Queries) UpdateSessionRefreshToken(ctx context.Context, arg UpdateSessi
 	_, err := q.db.Exec(ctx, query, arg.NewRefreshToken, arg.NewExpiresAt, arg.ID)
 	return err
 }
+
+func (q *Queries) CheckForNodeConflict(ctx context.Context, ownerID int64, parentID *string, name string) (bool, error) {
+	var conflictExists bool
+	var err error
+
+	if parentID == nil {
+		query := `SELECT EXISTS(SELECT 1 FROM nodes WHERE owner_id = $1 AND parent_id IS NULL AND name = $2 AND deleted_at IS NULL)`
+		err = q.db.QueryRow(ctx, query, ownerID, name).Scan(&conflictExists)
+	} else {
+		query := `SELECT EXISTS(SELECT 1 FROM nodes WHERE owner_id = $1 AND parent_id = $2 AND name = $3 AND deleted_at IS NULL)`
+		err = q.db.QueryRow(ctx, query, ownerID, *parentID, name).Scan(&conflictExists)
+	}
+
+	return conflictExists, err
+}

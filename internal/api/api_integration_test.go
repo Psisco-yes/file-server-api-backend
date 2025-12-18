@@ -1842,6 +1842,23 @@ func TestChunkedUpload_Integration(t *testing.T) {
 		require.Equal(t, http.StatusBadRequest, rrComplete.Code)
 		require.Contains(t, rrComplete.Body.String(), "upload is incomplete")
 	})
+
+	t.Run("initiate fails on name conflict", func(t *testing.T) {
+		user := createTestUserWithPassword(t, "user_chunk_conflict", "password")
+		loginResp := loginUserForTest(t, "user_chunk_conflict", "password")
+
+		existingFileName := "conflict_upload.txt"
+		createTestNodeAPI(t, existingFileName, "file", nil, user.ID)
+
+		initReqPayload := InitiateUploadRequest{Name: existingFileName, Size: 100}
+		body, _ := json.Marshal(initReqPayload)
+		reqInit := httptest.NewRequest("POST", "/api/v1/nodes/upload/initiate", bytes.NewReader(body))
+		reqInit.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+		rrInit := httptest.NewRecorder()
+		router.ServeHTTP(rrInit, reqInit)
+
+		require.Equal(t, http.StatusConflict, rrInit.Code)
+	})
 }
 
 func TestListOutgoingSharedNodesHandler(t *testing.T) {

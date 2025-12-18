@@ -15,7 +15,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // @Summary      Initiate a chunked file upload
@@ -42,7 +41,6 @@ func (s *Server) InitiateUploadHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-
 	if strings.TrimSpace(req.Name) == "" || req.Size <= 0 {
 		http.Error(w, "Invalid file name or size", http.StatusBadRequest)
 		return
@@ -61,6 +59,16 @@ func (s *Server) InitiateUploadHandler(w http.ResponseWriter, r *http.Request) {
 	hasWritePermission, err := s.store.CheckWritePermission(r.Context(), claims.UserID, req.ParentID)
 	if err != nil || !hasWritePermission {
 		http.Error(w, "You do not have permission to create items in this folder", http.StatusForbidden)
+		return
+	}
+
+	conflict, err := s.store.CheckForNodeConflict(r.Context(), ownerID, req.ParentID, req.Name)
+	if err != nil {
+		http.Error(w, "Failed to check for name conflicts", http.StatusInternalServerError)
+		return
+	}
+	if conflict {
+		http.Error(w, "A file with the same name already exists in this location", http.StatusConflict)
 		return
 	}
 
@@ -91,12 +99,26 @@ func (s *Server) InitiateUploadHandler(w http.ResponseWriter, r *http.Request) {
 		TotalSizeBytes: req.Size,
 	}
 
+	tempFilePath := filepath.Join(s.storage.GetBasePath(), "tmp", nodeID)
+	if err := os.MkdirAll(filepath.Dir(tempFilePath), 0755); err != nil {
+		http.Error(w, "Failed to create temporary upload directory", http.StatusInternalServerError)
+		return
+	}
+
+	file, err := os.Create(tempFilePath)
+	if err != nil {
+		http.Error(w, "Failed to create temporary file", http.StatusInternalServerError)
+		return
+	}
+	if err := file.Truncate(req.Size); err != nil {
+		file.Close()
+		http.Error(w, "Failed to allocate space for temporary file", http.StatusInternalServerError)
+		return
+	}
+	file.Close()
+
 	if err := s.store.CreateUpload(r.Context(), params); err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			http.Error(w, "A file with the same name already exists in this location", http.StatusConflict)
-			return
-		}
+		os.Remove(tempFilePath)
 		http.Error(w, "Failed to initiate upload session in database", http.StatusInternalServerError)
 		return
 	}
