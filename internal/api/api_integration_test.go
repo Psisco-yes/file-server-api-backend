@@ -463,6 +463,10 @@ func TestRefreshTokenHandler_Integration(t *testing.T) {
 	loginResp := loginUserForTest(t, username, password)
 	require.NotEmpty(t, loginResp.RefreshToken)
 
+	claims, err := auth.VerifyJWT(loginResp.AccessToken, testServer.config.JWT.Secret)
+	require.NoError(t, err)
+	originalSessionID := claims.SessionID
+
 	time.Sleep(1 * time.Second)
 
 	refreshReq := RefreshTokenRequest{RefreshToken: loginResp.RefreshToken}
@@ -473,11 +477,19 @@ func TestRefreshTokenHandler_Integration(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rr.Code)
 	var firstRefreshResp TokenResponse
-	err := json.Unmarshal(rr.Body.Bytes(), &firstRefreshResp)
+	err = json.Unmarshal(rr.Body.Bytes(), &firstRefreshResp)
 	require.NoError(t, err)
 	require.NotEmpty(t, firstRefreshResp.AccessToken)
 	require.NotEmpty(t, firstRefreshResp.RefreshToken)
 	require.NotEqual(t, loginResp.RefreshToken, firstRefreshResp.RefreshToken)
+
+	newClaims, err := auth.VerifyJWT(firstRefreshResp.AccessToken, testServer.config.JWT.Secret)
+	require.NoError(t, err)
+	require.Equal(t, originalSessionID, newClaims.SessionID, "Session ID should be preserved after refresh")
+
+	sessions, err := testServer.store.ListSessionsForUser(context.Background(), claims.UserID)
+	require.NoError(t, err)
+	require.Len(t, sessions, 1, "There should still be only one session in the database")
 
 	oldRefreshReq := RefreshTokenRequest{RefreshToken: loginResp.RefreshToken}
 	body, _ = json.Marshal(oldRefreshReq)
@@ -1993,7 +2005,7 @@ func TestAuthMiddleware(t *testing.T) {
 
 	t.Run("request with token signed by wrong secret returns 401", func(t *testing.T) {
 		user := &models.User{ID: 999, Username: "fakeuser"}
-		wrongToken, err := auth.GenerateJWT(user, "this_is_a_wrong_secret")
+		wrongToken, err := auth.GenerateJWT(user, "this_is_a_wrong_secret", uuid.New())
 		require.NoError(t, err)
 
 		req := httptest.NewRequest("GET", "/api/v1/me", nil)
@@ -2007,7 +2019,7 @@ func TestAuthMiddleware(t *testing.T) {
 		secret := testServer.config.JWT.Secret
 		expirationTime := time.Now().Add(1 * time.Nanosecond)
 		claims := &auth.AppClaims{
-			UserID: 1, Username: "expired_user",
+			UserID: 1, Username: "expired_user", SessionID: uuid.New(),
 			RegisteredClaims: jwt.RegisteredClaims{
 				ExpiresAt: jwt.NewNumericDate(expirationTime),
 			},
@@ -2140,4 +2152,37 @@ func TestListWriteableSharedFoldersHandler(t *testing.T) {
 
 		require.Equal(t, http.StatusNotFound, rr.Code)
 	})
+}
+
+func TestSessionIdentifier_Integration(t *testing.T) {
+	createTestUserWithPassword(t, "user_session_id", "password")
+	loginResp := loginUserForTest(t, "user_session_id", "password")
+
+	claims, err := auth.VerifyJWT(loginResp.AccessToken, testServer.config.JWT.Secret)
+	require.NoError(t, err)
+	require.NotEqual(t, uuid.Nil, claims.SessionID, "Token should contain a valid SessionID (jti)")
+
+	router := chi.NewRouter()
+	router.Use(testServer.AuthMiddleware)
+	router.Get("/api/v1/sessions", testServer.ListSessionsHandler)
+
+	req := httptest.NewRequest("GET", "/api/v1/sessions", nil)
+	req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	var sessions []models.Session
+	err = json.Unmarshal(rr.Body.Bytes(), &sessions)
+	require.NoError(t, err)
+
+	require.NotEmpty(t, sessions)
+	found := false
+	for _, s := range sessions {
+		if s.ID == claims.SessionID {
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "The session ID from the JWT claim should match a session ID in the database")
 }

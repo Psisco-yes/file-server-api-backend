@@ -887,27 +887,30 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) er
 	return err
 }
 
-func (q *Queries) GetUserByRefreshToken(ctx context.Context, refreshToken string) (*models.User, error) {
+func (q *Queries) GetSessionAndUserByRefreshToken(ctx context.Context, refreshToken string) (*models.Session, *models.User, error) {
 	query := `
-		SELECT 
-			u.id, u.username, u.password_hash, u.display_name, u.created_at, 
+		SELECT
+			s.id, s.user_agent, s.client_ip, s.expires_at, s.created_at,
+			u.id, u.username, u.password_hash, u.display_name, u.created_at,
 			u.storage_quota_bytes, u.storage_used_bytes
-		FROM users u
-		JOIN sessions s ON u.id = s.user_id
+		FROM sessions s
+		JOIN users u ON s.user_id = u.id
 		WHERE s.refresh_token = $1 AND s.expires_at > NOW()
 	`
+	var session models.Session
 	var user models.User
 	err := q.db.QueryRow(ctx, query, refreshToken).Scan(
+		&session.ID, &session.UserAgent, &session.ClientIP, &session.ExpiresAt, &session.CreatedAt,
 		&user.ID, &user.Username, &user.PasswordHash, &user.DisplayName, &user.CreatedAt,
 		&user.StorageQuotaBytes, &user.StorageUsedBytes,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
+			return nil, nil, nil
 		}
-		return nil, err
+		return nil, nil, err
 	}
-	return &user, nil
+	return &session, &user, nil
 }
 
 func (q *Queries) ListSessionsForUser(ctx context.Context, userID int64) ([]models.Session, error) {
@@ -1788,4 +1791,16 @@ func (q *Queries) GetRichWriteableSharedFolders(ctx context.Context, recipientID
 	}
 
 	return nodes, nil
+}
+
+type UpdateSessionParams struct {
+	ID              uuid.UUID
+	NewRefreshToken string
+	NewExpiresAt    time.Time
+}
+
+func (q *Queries) UpdateSessionRefreshToken(ctx context.Context, arg UpdateSessionParams) error {
+	query := `UPDATE sessions SET refresh_token = $1, expires_at = $2 WHERE id = $3`
+	_, err := q.db.Exec(ctx, query, arg.NewRefreshToken, arg.NewExpiresAt, arg.ID)
+	return err
 }

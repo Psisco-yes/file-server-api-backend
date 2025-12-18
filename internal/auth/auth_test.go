@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,8 +38,9 @@ func TestGenerateAndVerifyJWT(t *testing.T) {
 		ID:       123,
 		Username: "testuser",
 	}
+	sessionID := uuid.New()
 
-	tokenString, err := GenerateJWT(user, secret)
+	tokenString, err := GenerateJWT(user, secret, sessionID)
 	require.NoError(t, err)
 	require.NotEmpty(t, tokenString)
 
@@ -47,6 +49,7 @@ func TestGenerateAndVerifyJWT(t *testing.T) {
 	require.NotNil(t, claims)
 	require.Equal(t, user.ID, claims.UserID)
 	require.Equal(t, user.Username, claims.Username)
+	require.Equal(t, sessionID, claims.SessionID)
 	require.WithinDuration(t, time.Now().Add(1*time.Hour), claims.ExpiresAt.Time, 5*time.Second)
 
 	_, err = VerifyJWT(tokenString, "wrong_secret")

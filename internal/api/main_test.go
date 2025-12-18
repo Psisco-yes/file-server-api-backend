@@ -12,6 +12,7 @@ import (
 	"serwer-plikow/internal/websocket"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -26,7 +27,7 @@ func TestMain(m *testing.M) {
 	ctx := context.Background()
 
 	pgContainer, err := postgres.Run(ctx,
-		"postgres:14-alpine",
+		"postgres:17-alpine",
 		postgres.WithDatabase("test_api_db"),
 		postgres.WithUsername("user"),
 		postgres.WithPassword("password"),
@@ -80,7 +81,7 @@ func TestMain(m *testing.M) {
 	pool.QueryRow(ctx, `INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id`, username, hashedPassword).Scan(&userID)
 
 	testUser := &models.User{ID: userID, Username: username}
-	testUserToken, err = auth.GenerateJWT(testUser, cfg.JWT.Secret)
+	testUserToken, err = auth.GenerateJWT(testUser, cfg.JWT.Secret, uuid.New())
 	if err != nil {
 		log.Fatalf("Could not generate token: %s", err)
 	}

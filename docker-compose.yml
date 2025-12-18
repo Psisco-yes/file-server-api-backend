@@ -49,6 +49,20 @@ services:
       db:
         condition: service_healthy
 
+  cron:
+    image: postgres:18-alpine
+    restart: always
+    volumes:
+      - ./scripts/cleanup_sessions.sh:/scripts/cleanup_sessions.sh
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    command: >
+      sh -c "echo '0 3 * * * /scripts/cleanup_sessions.sh' > /etc/crontabs/root && crond -f -l 8"
+    depends_on:
+      - db
+
 volumes:
   postgres_data:
   file_storage:

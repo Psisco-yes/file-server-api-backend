@@ -724,9 +724,9 @@ func TestIsDescendantOf(t *testing.T) {
 	require.False(t, isDesc)
 }
 
-func TestGetUserByRefreshToken(t *testing.T) {
+func TestGetSessionAndUserByRefreshToken(t *testing.T) {
 	user := createTestUser(t, "user_by_refresh_token")
-	token := "valid_refresh_token"
+	token := "valid_refresh_token_get_session"
 	sessionParams := CreateSessionParams{
 		ID:           uuid.New(),
 		UserID:       user.ID,
@@ -738,16 +738,18 @@ func TestGetUserByRefreshToken(t *testing.T) {
 	err := testStore.CreateSession(context.Background(), sessionParams)
 	require.NoError(t, err)
 
-	foundUser, err := testStore.GetUserByRefreshToken(context.Background(), token)
+	foundSession, foundUser, err := testStore.GetSessionAndUserByRefreshToken(context.Background(), token)
 	require.NoError(t, err)
 	require.NotNil(t, foundUser)
+	require.NotNil(t, foundSession)
 	require.Equal(t, user.ID, foundUser.ID)
+	require.Equal(t, sessionParams.ID, foundSession.ID)
 
-	foundUser, err = testStore.GetUserByRefreshToken(context.Background(), "invalid_token")
+	_, foundUser, err = testStore.GetSessionAndUserByRefreshToken(context.Background(), "invalid_token")
 	require.NoError(t, err)
 	require.Nil(t, foundUser)
 
-	expiredToken := "expired_token"
+	expiredToken := "expired_token_get_session"
 	expiredSessionParams := CreateSessionParams{
 		ID:           uuid.New(),
 		UserID:       user.ID,
@@ -759,7 +761,7 @@ func TestGetUserByRefreshToken(t *testing.T) {
 	err = testStore.CreateSession(context.Background(), expiredSessionParams)
 	require.NoError(t, err)
 
-	foundUser, err = testStore.GetUserByRefreshToken(context.Background(), expiredToken)
+	_, foundUser, err = testStore.GetSessionAndUserByRefreshToken(context.Background(), expiredToken)
 	require.NoError(t, err)
 	require.Nil(t, foundUser)
 }
@@ -864,13 +866,14 @@ func TestDeleteSessionByRefreshToken(t *testing.T) {
 	sessions, err := testStore.ListSessionsForUser(context.Background(), user.ID)
 	require.NoError(t, err)
 	require.Len(t, sessions, 1)
-	foundUser, err := testStore.GetUserByRefreshToken(context.Background(), tokenToDelete)
-	require.NoError(t, err)
-	require.Nil(t, foundUser)
 
-	foundUser, err = testStore.GetUserByRefreshToken(context.Background(), tokenToKeep)
+	_, foundUser, err := testStore.GetSessionAndUserByRefreshToken(context.Background(), tokenToDelete)
 	require.NoError(t, err)
-	require.NotNil(t, foundUser)
+	require.Nil(t, foundUser, "User should not be found with the deleted refresh token")
+
+	_, foundUser, err = testStore.GetSessionAndUserByRefreshToken(context.Background(), tokenToKeep)
+	require.NoError(t, err)
+	require.NotNil(t, foundUser, "User should be found with the remaining refresh token")
 }
 
 func TestUpdateUserPassword(t *testing.T) {
@@ -1311,4 +1314,37 @@ func TestGetRichWriteableSharedFolders(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, folders, 0, "Should not list any writeable folders inside a read-only share")
 	})
+}
+
+func TestUpdateSessionRefreshToken(t *testing.T) {
+	user := createTestUser(t, "user_update_session")
+
+	initialSessionParams := CreateSessionParams{
+		ID:           uuid.New(),
+		UserID:       user.ID,
+		RefreshToken: "initial_token",
+		ExpiresAt:    time.Now().Add(24 * time.Hour),
+	}
+	err := testStore.CreateSession(context.Background(), initialSessionParams)
+	require.NoError(t, err)
+
+	newRefreshToken := "updated_token"
+	newExpiresAt := time.Now().Add(48 * time.Hour)
+	updateParams := UpdateSessionParams{
+		ID:              initialSessionParams.ID,
+		NewRefreshToken: newRefreshToken,
+		NewExpiresAt:    newExpiresAt,
+	}
+
+	err = testStore.UpdateSessionRefreshToken(context.Background(), updateParams)
+	require.NoError(t, err)
+
+	var foundRefreshToken string
+	var foundExpiresAt time.Time
+	query := "SELECT refresh_token, expires_at FROM sessions WHERE id = $1"
+	err = testStore.pool.QueryRow(context.Background(), query, initialSessionParams.ID).Scan(&foundRefreshToken, &foundExpiresAt)
+	require.NoError(t, err)
+
+	require.Equal(t, newRefreshToken, foundRefreshToken)
+	require.WithinDuration(t, newExpiresAt, foundExpiresAt, time.Second)
 }

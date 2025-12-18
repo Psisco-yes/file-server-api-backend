@@ -14,7 +14,7 @@ import (
 )
 
 // @Summary      Logs a user in
-// @Description  Authenticates a user and returns a short-lived access token and a long-lived refresh token.
+// @Description  Authenticates a user and establishes a new server-side session. Returns a short-lived access token (containing the unique Session ID claim) and a long-lived refresh token.
 // @Tags         auth
 // @Accept       json
 // @Produce      json
@@ -48,7 +48,9 @@ func (s *Server) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accessToken, err := auth.GenerateJWT(user, s.config.JWT.Secret)
+	sessionID := uuid.New()
+
+	accessToken, err := auth.GenerateJWT(user, s.config.JWT.Secret, sessionID)
 	if err != nil {
 		http.Error(w, "Failed to generate access token", http.StatusInternalServerError)
 		return
@@ -64,7 +66,7 @@ func (s *Server) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	expiresAt := time.Now().Add(24 * time.Hour)
 
 	sessionParams := database.CreateSessionParams{
-		ID:           uuid.New(),
+		ID:           sessionID,
 		UserID:       user.ID,
 		RefreshToken: refreshToken,
 		UserAgent:    r.UserAgent(),
@@ -87,7 +89,7 @@ func (s *Server) LoginHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary      Refresh access token
-// @Description  Provides a new short-lived access token and a new refresh token in exchange for a valid, non-expired refresh token. Implements refresh token rotation.
+// @Description  Exchanges a valid refresh token for a new access token and a rotated refresh token. The new Access Token retains the original Session ID, ensuring session continuity while rotating credentials.
 // @Tags         auth
 // @Accept       json
 // @Produce      json
@@ -112,7 +114,7 @@ func (s *Server) RefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
 	var newAccessToken, newRefreshToken string
 
 	txErr := s.store.ExecTx(r.Context(), func(q *database.Queries) error {
-		user, err := q.GetUserByRefreshToken(r.Context(), req.RefreshToken)
+		session, user, err := q.GetSessionAndUserByRefreshToken(r.Context(), req.RefreshToken)
 		if err != nil {
 			return err
 		}
@@ -120,30 +122,25 @@ func (s *Server) RefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
 			return errors.New("invalid or expired refresh token")
 		}
 
-		if err := q.DeleteSessionByRefreshToken(r.Context(), req.RefreshToken); err != nil {
-			return err
-		}
-
-		newAccessToken, err = auth.GenerateJWT(user, s.config.JWT.Secret)
+		newAccessToken, err = auth.GenerateJWT(user, s.config.JWT.Secret, session.ID)
 		if err != nil {
 			return err
 		}
 
 		generateID, _ := nanoid.Standard(40)
 		newRefreshToken = generateID()
-		sessionParams := database.CreateSessionParams{
-			ID:           uuid.New(),
-			UserID:       user.ID,
-			RefreshToken: newRefreshToken,
-			UserAgent:    r.UserAgent(),
-			ClientIP:     getClientIP(r),
-			ExpiresAt:    time.Now().Add(24 * time.Hour),
+
+		updateParams := database.UpdateSessionParams{
+			ID:              session.ID,
+			NewRefreshToken: newRefreshToken,
+			NewExpiresAt:    time.Now().Add(24 * time.Hour),
 		}
-		return q.CreateSession(r.Context(), sessionParams)
+		return q.UpdateSessionRefreshToken(r.Context(), updateParams)
 	})
 
 	if txErr != nil {
 		if txErr.Error() == "invalid or expired refresh token" {
+			s.store.DeleteSessionByRefreshToken(r.Context(), req.RefreshToken)
 			http.Error(w, txErr.Error(), http.StatusUnauthorized)
 		} else {
 			log.Printf("ERROR: Refresh token transaction failed: %v", txErr)

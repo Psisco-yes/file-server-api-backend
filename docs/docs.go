@@ -17,7 +17,7 @@ const docTemplate = `{
     "paths": {
         "/auth/login": {
             "post": {
-                "description": "Authenticates a user and returns a short-lived access token and a long-lived refresh token.",
+                "description": "Authenticates a user and establishes a new server-side session. Returns a short-lived access token (containing the unique Session ID claim) and a long-lived refresh token.",
                 "consumes": [
                     "application/json"
                 ],
@@ -75,7 +75,7 @@ const docTemplate = `{
         },
         "/auth/refresh": {
             "post": {
-                "description": "Provides a new short-lived access token and a new refresh token in exchange for a valid, non-expired refresh token. Implements refresh token rotation.",
+                "description": "Exchanges a valid refresh token for a new access token and a rotated refresh token. The new Access Token retains the original Session ID, ensuring session continuity while rotating credentials.",
                 "consumes": [
                     "application/json"
                 ],
