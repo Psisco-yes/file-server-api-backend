@@ -10,13 +10,13 @@ W pełni funkcjonalny, REST-owy serwer plików zbudowany w Go, inspirowany syste
 -   **Obsługa Dużych Plików:** Wsparcie dla przesyłania bardzo dużych plików dzięki mechanizmowi "chunked uploads", z możliwością wznawiania.
 -   **Sortowanie po Stronie Serwera:** Wszystkie endpointy listujące obsługują zaawansowane sortowanie wielokolumnowe.
 -   **Bezpieczeństwo:**
-    *   **Uwierzytelnianie JWT:** Zabezpieczenie oparte na tokenach z rotacją i krótkim czasem życia `access token`.
+    *   **Uwierzytelnianie JWT:** Zabezpieczenie oparte na tokenach z rotacją i powiązaniem tokena z sesją (`jti`).
     *   **Zarządzanie Sesjami:** Możliwość przeglądania i unieważniania aktywnych sesji.
     *   **HTTPS:** Domyślna obsługa szyfrowanego połączenia dzięki integracji z Caddy.
-    *   **Rate Limiting:** Wbudowana ochrona przed atakami typu brute-force i DoS.
--   **Elastyczne Udostępnianie:** Możliwość udostępniania plików i folderów z uprawnieniami, i dziedziczeniem.
+    *   **Rate Limiting:** Wbudowana ochrona przed atakami typu brute-force (10 prób/minutę) i DoS.
+-   **Elastyczne Udostępnianie:** Możliwość udostępniania plików i folderów z uprawnieniami (`read`/`write`) i poprawnym dziedziczeniem uprawnień.
 -   **Użyteczne Funkcje:**
-    *   **Kosz:** Funkcjonalność "miękkiego usuwania" z opcją rekurencyjnego przywracania.
+    *   **Kosz:** Funkcjonalność "miękkiego usuwania" z opcją rekurencyjnego przywracania całej struktury folderów i inteligentną obsługą konfliktów nazw.
     *   **Ulubione:** Oznaczanie ważnych plików i folderów.
     *   **Wyszukiwarka:** Globalne wyszukiwanie po nazwie we własnych i udostępnionych zasobach.
     *   **Archiwizator ZIP:** Pobieranie wielu plików i folderów jako pojedynczego archiwum `.zip`.
@@ -129,7 +129,7 @@ Dla małych plików (np. < 100MB), nadal można używać prostszego endpointu `P
 
 ## Zarządzanie Administracyjne (Skrypty PowerShell)
 
-Zarządzanie użytkownikami i systemem odbywa się za pomocą gotowych skryptów PowerShell (`*.ps1`), które znajdują się w folderze `/scripts`.
+Zarządzanie użytkownikami i systemem odbywa się za pomocą gotowych skryptów PowerShell (`*.ps1`) w folderze `/scripts`.
 
 ### Wymagania
 
@@ -194,11 +194,7 @@ Wyświetla ogólne statystyki serwera.
 Wszystkie ścieżki są poprzedzone `/api/v1`. Wszystkie chronione endpointy wymagają nagłówka `Authorization: Bearer <access_token>`.
 
 **Ważne informacje o odpowiedziach:**
-*   Większość endpointów zwraca obiekt `RichNode`, który zawiera pole `permissions`. Może ono przyjąć wartości:
-    *   `"owner"`: Jesteś właścicielem tego zasobu.
-    *   `"write"`: Masz uprawnienia do zapisu (odziedziczone z udostępnienia).
-    *   `"read"`: Masz uprawnienia tylko do odczytu.
-    *   `null` (pole nieobecne): Nie jesteś właścicielem i zasób nie jest Ci udostępniony.
+*   Większość endpointów zwraca obiekt `RichNode`, który zawiera pole `permissions` (`"owner"`, `"write"`, `"read"`).
 *   Wszystkie endpointy listujące obsługują paginację (`?limit=...&offset=...`) oraz sortowanie.
 
 **Sortowanie:** Użyj parametru `?sort=...`, który przyjmuje listę pól oddzielonych przecinkami. Użyj prefiksu `-` dla sortowania malejącego. Dostępne pola: `name`, `size`, `modifiedAt`, `type`.
@@ -228,10 +224,10 @@ Wszystkie ścieżki są poprzedzone `/api/v1`. Wszystkie chronione endpointy wym
 - `POST /nodes/{nodeId}/restore`: Przywróć z kosza (rekurencyjnie).
 - `POST /nodes/{nodeId}/copy`: Stwórz głęboką kopię.
 
-### Przesyłanie Dużych Plików (Chunked Upload)
-- `POST /nodes/upload/initiate`: Rozpocznij sesję przesyłania.
-- `PATCH /nodes/upload/{uploadId}`: Wgraj część pliku.
-- `POST /nodes/upload/{uploadId}/complete`: Zakończ przesyłanie.
+### Przesyłanie Dużych Plików
+- `POST /nodes/upload/initiate`
+- `PATCH /nodes/upload/{uploadId}`
+- `POST /nodes/upload/{uploadId}/complete`
 
 ### Udostępnianie
 - `POST /nodes/{nodeId}/share`: Udostępnij plik/folder.
@@ -296,6 +292,6 @@ Komunikaty są wysyłane w formacie JSON i mają następującą strukturę:
 
 ## Roadmap / Potencjalne Ulepszenia
 
--   **Wysokie zużycie RAM przy archiwizacji:** Mechanizm tworzenia archiwum ZIP może być nieefektywny przy bardzo dużych strukturach folderów i mógłby zostać zoptymalizowany (streaming).
--   **Natychmiastowe unieważnianie tokenów (Blacklisting):** Obecnie `access token` jest ważny do momentu naturalnego wygaśnięcia. W przyszłości można zaimplementować mechanizm "czarnej listy" do natychmiastowego unieważniania tokenów po wylogowaniu.
+-   **Wysokie zużycie RAM przy archiwizacji:** Mechanizm tworzenia archiwum ZIP mógłby zostać zoptymalizowany pod kątem strumieniowania (streaming).
+-   **Natychmiastowe unieważnianie tokenów (Blacklisting):** Implementacja "czarnej listy" (np. w Redis) do natychmiastowego unieważniania tokenów po wylogowaniu.
 -   **Dziennik Audytowy (Audit Log):** Stworzenie oddzielnego, niezmiennego dziennika zdarzeń krytycznych dla bezpieczeństwa i administracji.
