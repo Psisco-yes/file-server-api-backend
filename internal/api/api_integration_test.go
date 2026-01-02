@@ -1533,7 +1533,7 @@ func TestGetNodeHandler_Integration(t *testing.T) {
 		require.Equal(t, http.StatusOK, rrRoot.Code)
 		var respRoot NodeDetailResponse
 		json.Unmarshal(rrRoot.Body.Bytes(), &respRoot)
-		require.Len(t, respRoot.Path, 0, "Path for share root should be empty (auto-detected)")
+		require.Len(t, respRoot.Path, 0, "Path for share root itself should be empty")
 
 		urlDeep := fmt.Sprintf("/api/v1/nodes/%s?share_context=%s", deepFile.ID, sharedFolder.ID)
 		reqDeep := httptest.NewRequest("GET", urlDeep, nil)
@@ -1545,8 +1545,13 @@ func TestGetNodeHandler_Integration(t *testing.T) {
 		var respDeep NodeDetailResponse
 		json.Unmarshal(rrDeep.Body.Bytes(), &respDeep)
 
-		require.Len(t, respDeep.Path, 1, "Should have 1 ancestor in relative path")
-		require.Equal(t, "Inner Folder", respDeep.Path[0].Name)
+		require.Len(t, respDeep.Path, 2, "Should include share root and inner folder")
+
+		require.Equal(t, "Shared Folder", respDeep.Path[0].Name)
+		require.Equal(t, sharedFolder.ID, respDeep.Path[0].ID)
+
+		require.Equal(t, "Inner Folder", respDeep.Path[1].Name)
+		require.Equal(t, innerFolder.ID, respDeep.Path[1].ID)
 	})
 }
 

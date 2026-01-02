@@ -1135,7 +1135,7 @@ func (s *Server) GetNodeHandler(w http.ResponseWriter, r *http.Request) {
 				}
 
 				if shareRootIndex != -1 {
-					path = path[shareRootIndex+1:]
+					path = path[shareRootIndex:]
 				} else {
 					path = []*models.RichNode{}
 				}
