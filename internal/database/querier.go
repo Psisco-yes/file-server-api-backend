@@ -1372,15 +1372,23 @@ func (q *Queries) GetRichNodesByParentID(ctx context.Context, ownerID int64, req
 func (q *Queries) GetRichNodePath(ctx context.Context, nodeID string, requesterID int64) ([]*models.RichNode, error) {
 	query := fmt.Sprintf(`
 		WITH RECURSIVE node_path AS (
-			SELECT * FROM nodes WHERE id = (SELECT parent_id FROM nodes WHERE id = $2)
+			SELECT id, parent_id, 0 as level 
+			FROM nodes 
+			WHERE id = (SELECT parent_id FROM nodes WHERE id = $2)
+			
 			UNION ALL
-			SELECT n.* FROM nodes n JOIN node_path np ON n.id = np.parent_id
+			
+			SELECT n.id, n.parent_id, np.level - 1
+			FROM nodes n 
+			JOIN node_path np ON n.id = np.parent_id
 		)
 		SELECT %s
-		FROM node_path n
+		FROM nodes n
+		JOIN node_path np ON n.id = np.id
 		JOIN users u ON n.owner_id = u.id
 		LEFT JOIN user_favorites fav ON n.id = fav.node_id AND fav.user_id = $1
-		WHERE n.deleted_at IS NULL;
+		WHERE n.deleted_at IS NULL
+		ORDER BY np.level ASC
 	`, richNodeFields)
 
 	rows, err := q.db.Query(ctx, query, requesterID, nodeID)
@@ -1399,10 +1407,6 @@ func (q *Queries) GetRichNodePath(ctx context.Context, nodeID string, requesterI
 	}
 	if err = rows.Err(); err != nil {
 		return nil, err
-	}
-
-	for i, j := 0, len(pathNodes)-1; i < j; i, j = i+1, j-1 {
-		pathNodes[i], pathNodes[j] = pathNodes[j], pathNodes[i]
 	}
 
 	if pathNodes == nil {
@@ -1555,19 +1559,20 @@ func buildOrderByClause(sort string) string {
 
 		if sqlColumn, ok := columnMap[field]; ok {
 			clause := sqlColumn
-			if field == "size" {
+			switch field {
+			case "size":
 				if order == "ASC" {
 					clause += " ASC NULLS LAST"
 				} else {
 					clause += " DESC NULLS FIRST"
 				}
-			} else if field == "type" {
+			case "type":
 				if order == "ASC" {
 					clause += " DESC"
 				} else {
 					clause += " ASC"
 				}
-			} else {
+			default:
 				clause += " " + order
 			}
 			orderClauses = append(orderClauses, clause)
@@ -1818,4 +1823,41 @@ func (q *Queries) CheckForNodeConflict(ctx context.Context, ownerID int64, paren
 	}
 
 	return conflictExists, err
+}
+
+func (q *Queries) FindHighestSharedAncestor(ctx context.Context, nodeID string, recipientID int64) (*models.Node, error) {
+	query := `
+		WITH RECURSIVE node_and_ancestors AS (
+			SELECT id, parent_id, 1 as depth
+			FROM nodes
+			WHERE id = $1 AND deleted_at IS NULL
+			
+			UNION ALL
+			
+			SELECT n.id, n.parent_id, naa.depth + 1
+			FROM nodes n
+			JOIN node_and_ancestors naa ON n.id = naa.parent_id
+			WHERE n.deleted_at IS NULL
+		)
+		SELECT n.id, n.owner_id, n.parent_id, n.name, n.node_type, n.size_bytes, n.mime_type, n.created_at, n.modified_at
+		FROM nodes n
+		JOIN node_and_ancestors naa ON n.id = naa.id
+		WHERE n.id IN (SELECT node_id FROM shares WHERE recipient_id = $2)
+		ORDER BY naa.depth DESC
+		LIMIT 1;
+	`
+
+	var node models.Node
+	err := q.db.QueryRow(ctx, query, nodeID, recipientID).Scan(
+		&node.ID, &node.OwnerID, &node.ParentID, &node.Name, &node.NodeType,
+		&node.SizeBytes, &node.MimeType, &node.CreatedAt, &node.ModifiedAt,
+	)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &node, nil
 }

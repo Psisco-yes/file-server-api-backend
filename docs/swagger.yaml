@@ -704,16 +704,17 @@ paths:
       tags:
       - nodes
     get:
-      description: Retrieves the metadata for a single file or folder by its ID. The
-        user must be the owner or have access through a share.
+      description: Retrieves the metadata for a single file or folder, including its
+        ancestor path (breadcrumbs) and share information (for the owner). For shared
+        items, the path is relative to the share point.
       parameters:
       - description: The ID of the node to retrieve
         in: path
         name: nodeId
         required: true
         type: string
-      - description: The ID of the root shared node, used to calculate relative paths
-          for breadcrumbs.
+      - description: 'Optional: The ID of the root shared node, used as a hint to
+          calculate relative paths. If omitted for a shared item, it will be auto-detected.'
         in: query
         name: share_context
         type: string

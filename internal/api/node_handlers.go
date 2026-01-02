@@ -1075,12 +1075,12 @@ func (s *Server) CopyNodeHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary      Get node details
-// @Description  Retrieves the metadata for a single file or folder by its ID. The user must be the owner or have access through a share.
+// @Description  Retrieves the metadata for a single file or folder, including its ancestor path (breadcrumbs) and share information (for the owner). For shared items, the path is relative to the share point.
 // @Tags         nodes
 // @Produce      json
 // @Security     BearerAuth
 // @Param        nodeId   path      string  true  "The ID of the node to retrieve"
-// @Param        share_context  query     string  false  "The ID of the root shared node, used to calculate relative paths for breadcrumbs."
+// @Param        share_context  query     string  false  "Optional: The ID of the root shared node, used as a hint to calculate relative paths. If omitted for a shared item, it will be auto-detected."
 // @Success      200      {object}  NodeDetailResponse
 // @Failure      401      {string}  string "Unauthorized"
 // @Failure      404      {string}  string "Not Found - Node not found or access denied"
@@ -1094,7 +1094,7 @@ func (s *Server) GetNodeHandler(w http.ResponseWriter, r *http.Request) {
 
 	richNode, err := s.store.GetRichNodeIfAccessible(r.Context(), nodeID, claims.UserID)
 	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		http.Error(w, "Internal server error while retrieving node", http.StatusInternalServerError)
 		return
 	}
 	if richNode == nil {
@@ -1108,16 +1108,38 @@ func (s *Server) GetNodeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if shareContextID != "" && richNode.Owner.ID != claims.UserID {
-		shareRootIndex := -1
-		for i, p := range path {
-			if p.ID == shareContextID {
-				shareRootIndex = i
-				break
+	if richNode.Owner.ID != claims.UserID {
+		rootShareID := shareContextID
+
+		if rootShareID == "" {
+			highestAncestor, err := s.store.FindHighestSharedAncestor(r.Context(), nodeID, claims.UserID)
+			if err != nil {
+				http.Error(w, "Failed to determine share context", http.StatusInternalServerError)
+				return
+			}
+			if highestAncestor != nil {
+				rootShareID = highestAncestor.ID
 			}
 		}
-		if shareRootIndex != -1 {
-			path = path[shareRootIndex+1:]
+
+		if rootShareID != "" {
+			if nodeID == rootShareID {
+				path = []*models.RichNode{}
+			} else {
+				shareRootIndex := -1
+				for i, p := range path {
+					if p.ID == rootShareID {
+						shareRootIndex = i
+						break
+					}
+				}
+
+				if shareRootIndex != -1 {
+					path = path[shareRootIndex+1:]
+				} else {
+					path = []*models.RichNode{}
+				}
+			}
 		}
 	}
 

@@ -8,12 +8,12 @@ W pełni funkcjonalny, REST-owy serwer plików zbudowany w Go, inspirowany syste
 
 -   **Zaawansowane Zarządzanie Plikami:** Pełen zestaw operacji CRUD na plikach i folderach.
 -   **Obsługa Dużych Plików:** Wsparcie dla przesyłania bardzo dużych plików dzięki mechanizmowi "chunked uploads", z możliwością wznawiania.
--   **Sortowanie po Stronie Serwera:** Wszystkie endpointy listujące obsługują zaawansowane sortowanie wielokolumnowe.
+-   **Sortowanie po Stronie Serwera:** Wszystkie endpointy listujące obsługują zaawansowane sortowanie wielokolumnowe (np. `?sort=type,-name`).
 -   **Bezpieczeństwo:**
     *   **Uwierzytelnianie JWT:** Zabezpieczenie oparte na tokenach z rotacją i powiązaniem tokena z sesją (`jti`).
     *   **Zarządzanie Sesjami:** Możliwość przeglądania i unieważniania aktywnych sesji.
     *   **HTTPS:** Domyślna obsługa szyfrowanego połączenia dzięki integracji z Caddy.
-    *   **Rate Limiting:** Wbudowana ochrona przed atakami typu brute-force (10 prób/minutę) i DoS.
+    *   **Rate Limiting:** Wbudowana ochrona przed atakami typu brute-force (limit 10 prób logowania na minutę) oraz ogólna ochrona przed DoS.
 -   **Elastyczne Udostępnianie:** Możliwość udostępniania plików i folderów z uprawnieniami (`read`/`write`) i poprawnym dziedziczeniem uprawnień.
 -   **Użyteczne Funkcje:**
     *   **Kosz:** Funkcjonalność "miękkiego usuwania" z opcją rekurencyjnego przywracania całej struktury folderów i inteligentną obsługą konfliktów nazw.
@@ -26,12 +26,12 @@ W pełni funkcjonalny, REST-owy serwer plików zbudowany w Go, inspirowany syste
 -   **Zarządzanie Zasobami:** Limity miejsca (quotas) na użytkownika.
 -   **Monitoring i Diagnostyka:** Endpointy `/health` i `/metrics` (w formacie Prometheus).
 -   **Dokumentacja API:** Automatycznie generowana i interaktywna dokumentacja Swagger UI.
--   **Pełne Pokrycie Testami:** Wysokie pokrycie kodu testami integracyjnymi i jednostkowymi.
+-   **Pełne Pokrycie Testami:** Wysokie pokrycie kodu testami integracyjnymi i jednostkowymi, weryfikującymi wszystkie kluczowe scenariusze.
 
 ## Stack Technologiczny
 
 -   **Backend:** Go (Golang) 1.25.5
--   **Baza Danych:** PostgreSQL 17
+-   **Baza Danych:** PostgreSQL 17 (obraz `postgres:17-alpine`)
 -   **Reverse Proxy (HTTPS):** Caddy 2.10.2
 -   **Konteneryzacja:** Docker & Docker Compose
 -   **Testowanie:** `testcontainers-go`, `testify`
@@ -45,7 +45,7 @@ Ten przewodnik zakłada, że serwer jest uruchamiany lokalnie.
 
 1.  **Git**
 2.  **Docker** i **Docker Compose**
-3.  **mkcert**
+3.  **mkcert** (do wygenerowania lokalnie zaufanych certyfikatów SSL)
 
 ### Kroki Instalacyjne
 
@@ -129,7 +129,7 @@ Dla małych plików (np. < 100MB), nadal można używać prostszego endpointu `P
 
 ## Zarządzanie Administracyjne (Skrypty PowerShell)
 
-Zarządzanie użytkownikami i systemem odbywa się za pomocą gotowych skryptów PowerShell (`*.ps1`) w folderze `/scripts`.
+Zarządzanie użytkownikami i systemem odbywa się za pomocą gotowych skryptów PowerShell (`*.ps1`), które znajdują się w folderze `/scripts`.
 
 ### Wymagania
 
@@ -194,8 +194,13 @@ Wyświetla ogólne statystyki serwera.
 Wszystkie ścieżki są poprzedzone `/api/v1`. Wszystkie chronione endpointy wymagają nagłówka `Authorization: Bearer <access_token>`.
 
 **Ważne informacje o odpowiedziach:**
-*   Większość endpointów zwraca obiekt `RichNode`, który zawiera pole `permissions` (`"owner"`, `"write"`, `"read"`).
+*   Większość endpointów zwraca obiekt `RichNode`, który zawiera pole `permissions`. Może ono przyjąć wartości:
+    *   `"owner"`: Jesteś właścicielem tego zasobu.
+    *   `"write"`: Masz uprawnienia do zapisu (odziedziczone z udostępnienia).
+    *   `"read"`: Masz uprawnienia tylko do odczytu.
+    *   `null` (pole nieobecne): Nie jesteś właścicielem i zasób nie jest Ci udostępniony.
 *   Wszystkie endpointy listujące obsługują paginację (`?limit=...&offset=...`) oraz sortowanie.
+*   W przypadku przekroczenia limitu żądań, serwer zwróci kod `429 Too Many Requests`.
 
 **Sortowanie:** Użyj parametru `?sort=...`, który przyjmuje listę pól oddzielonych przecinkami. Użyj prefiksu `-` dla sortowania malejącego. Dostępne pola: `name`, `size`, `modifiedAt`, `type`.
 *Przykład: `?sort=type,-name` (sortuj po typie rosnąco, potem po nazwie malejąco).*
@@ -224,10 +229,10 @@ Wszystkie ścieżki są poprzedzone `/api/v1`. Wszystkie chronione endpointy wym
 - `POST /nodes/{nodeId}/restore`: Przywróć z kosza (rekurencyjnie).
 - `POST /nodes/{nodeId}/copy`: Stwórz głęboką kopię.
 
-### Przesyłanie Dużych Plików
-- `POST /nodes/upload/initiate`
-- `PATCH /nodes/upload/{uploadId}`
-- `POST /nodes/upload/{uploadId}/complete`
+### Przesyłanie Dużych Plików (Chunked Upload)
+- `POST /nodes/upload/initiate`: Rozpocznij sesję przesyłania.
+- `PATCH /nodes/upload/{uploadId}`: Wgraj część pliku.
+- `POST /nodes/upload/{uploadId}/complete`: Zakończ przesyłanie.
 
 ### Udostępnianie
 - `POST /nodes/{nodeId}/share`: Udostępnij plik/folder.
@@ -292,6 +297,7 @@ Komunikaty są wysyłane w formacie JSON i mają następującą strukturę:
 
 ## Roadmap / Potencjalne Ulepszenia
 
--   **Wysokie zużycie RAM przy archiwizacji:** Mechanizm tworzenia archiwum ZIP mógłby zostać zoptymalizowany pod kątem strumieniowania (streaming).
--   **Natychmiastowe unieważnianie tokenów (Blacklisting):** Implementacja "czarnej listy" (np. w Redis) do natychmiastowego unieważniania tokenów po wylogowaniu.
+-   **Wysokie zużycie RAM przy archiwizacji:** Mechanizm tworzenia archiwum ZIP może być nieefektywny przy bardzo dużych strukturach folderów i mógłby zostać zoptymalizowany (streaming).
+-   **Natychmiastowe unieważnianie tokenów (Blacklisting):** Obecnie `access token` jest ważny do momentu naturalnego wygaśnięcia. W przyszłości można zaimplementować mechanizm "czarnej listy" (np. w Redis) do natychmiastowego unieważniania tokenów po wylogowaniu.
 -   **Dziennik Audytowy (Audit Log):** Stworzenie oddzielnego, niezmiennego dziennika zdarzeń krytycznych dla bezpieczeństwa i administracji.
+```

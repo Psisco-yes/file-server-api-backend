@@ -1018,7 +1018,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Retrieves the metadata for a single file or folder by its ID. The user must be the owner or have access through a share.",
+                "description": "Retrieves the metadata for a single file or folder, including its ancestor path (breadcrumbs) and share information (for the owner). For shared items, the path is relative to the share point.",
                 "produces": [
                     "application/json"
                 ],
@@ -1036,7 +1036,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "The ID of the root shared node, used to calculate relative paths for breadcrumbs.",
+                        "description": "Optional: The ID of the root shared node, used as a hint to calculate relative paths. If omitted for a shared item, it will be auto-detected.",
                         "name": "share_context",
                         "in": "query"
                     }

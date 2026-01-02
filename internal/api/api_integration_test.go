@@ -1467,12 +1467,12 @@ func TestGetNodeHandler_Integration(t *testing.T) {
 		require.True(t, resp.IsFavorited, "File should be favorited by owner")
 		require.True(t, resp.IsShared, "File should be marked as shared")
 
-		require.Len(t, resp.Path, 1, "Path should contain one ancestor")
+		require.Len(t, resp.Path, 1, "Owner should see the full path")
 		require.Equal(t, folderA.ID, resp.Path[0].ID)
 		require.Equal(t, "FolderA_Details", resp.Path[0].Name)
 		require.Equal(t, owner.Username, resp.Path[0].Owner.Username)
 
-		require.Len(t, resp.Shares, 1, "Shares should contain one entry")
+		require.Len(t, resp.Shares, 1, "Owner should see shares")
 		require.Equal(t, recipient.Username, resp.Shares[0].RecipientUsername)
 		require.Equal(t, "read", resp.Shares[0].Permissions)
 	})
@@ -1494,10 +1494,9 @@ func TestGetNodeHandler_Integration(t *testing.T) {
 		require.False(t, resp.IsFavorited, "File should not be favorited by recipient by default")
 		require.True(t, resp.IsShared, "Shared flag should be visible to recipient")
 
-		require.Empty(t, resp.Shares, "Shares field should be empty for non-owners")
+		require.Len(t, resp.Path, 0, "Path should be empty when only the file is shared")
 
-		require.Len(t, resp.Path, 1)
-		require.Equal(t, folderA.ID, resp.Path[0].ID)
+		require.Empty(t, resp.Shares, "Shares field should be empty for non-owners")
 	})
 
 	t.Run("stranger cannot get details of a private node", func(t *testing.T) {
@@ -1517,28 +1516,24 @@ func TestGetNodeHandler_Integration(t *testing.T) {
 
 		privateRoot, _ := createTestNodeAPI(t, "Private Root", "folder", nil, ownerCtx.ID)
 		sharedFolder, _ := createTestNodeAPI(t, "Shared Folder", "folder", &privateRoot.ID, ownerCtx.ID)
-		innerFile, _ := createTestNodeAPI(t, "Inner File.txt", "file", &sharedFolder.ID, ownerCtx.ID)
+		innerFolder, _ := createTestNodeAPI(t, "Inner Folder", "folder", &sharedFolder.ID, ownerCtx.ID)
+		deepFile, _ := createTestNodeAPI(t, "Deep File.txt", "file", &innerFolder.ID, ownerCtx.ID)
 
 		_, err := testServer.store.ShareNode(context.Background(), database.ShareNodeParams{
 			NodeID: sharedFolder.ID, SharerID: ownerCtx.ID, RecipientID: recipientCtx.ID, Permissions: "read",
 		})
 		require.NoError(t, err)
 
-		url := fmt.Sprintf("/api/v1/nodes/%s?share_context=%s", innerFile.ID, sharedFolder.ID)
-		req := httptest.NewRequest("GET", url, nil)
-		req.Header.Set("Authorization", "Bearer "+recipientLoginCtx.AccessToken)
-		rr := httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
+		urlRoot := fmt.Sprintf("/api/v1/nodes/%s", sharedFolder.ID)
+		reqRoot := httptest.NewRequest("GET", urlRoot, nil)
+		reqRoot.Header.Set("Authorization", "Bearer "+recipientLoginCtx.AccessToken)
+		rrRoot := httptest.NewRecorder()
+		router.ServeHTTP(rrRoot, reqRoot)
 
-		require.Equal(t, http.StatusOK, rr.Code)
-		var resp NodeDetailResponse
-		err = json.Unmarshal(rr.Body.Bytes(), &resp)
-		require.NoError(t, err)
-
-		require.Len(t, resp.Path, 0, "Path should be empty relative to the share context root")
-
-		innerFolder, _ := createTestNodeAPI(t, "Inner Folder", "folder", &sharedFolder.ID, ownerCtx.ID)
-		deepFile, _ := createTestNodeAPI(t, "Deep File.txt", "file", &innerFolder.ID, ownerCtx.ID)
+		require.Equal(t, http.StatusOK, rrRoot.Code)
+		var respRoot NodeDetailResponse
+		json.Unmarshal(rrRoot.Body.Bytes(), &respRoot)
+		require.Len(t, respRoot.Path, 0, "Path for share root should be empty (auto-detected)")
 
 		urlDeep := fmt.Sprintf("/api/v1/nodes/%s?share_context=%s", deepFile.ID, sharedFolder.ID)
 		reqDeep := httptest.NewRequest("GET", urlDeep, nil)
@@ -1548,11 +1543,10 @@ func TestGetNodeHandler_Integration(t *testing.T) {
 
 		require.Equal(t, http.StatusOK, rrDeep.Code)
 		var respDeep NodeDetailResponse
-		err = json.Unmarshal(rrDeep.Body.Bytes(), &respDeep)
-		require.NoError(t, err)
+		json.Unmarshal(rrDeep.Body.Bytes(), &respDeep)
 
-		require.Len(t, respDeep.Path, 1, "Path should contain one element relative to share context")
-		require.Equal(t, "Inner Folder", respDeep.Path[0].Name, "Path should not show 'Private Root'")
+		require.Len(t, respDeep.Path, 1, "Should have 1 ancestor in relative path")
+		require.Equal(t, "Inner Folder", respDeep.Path[0].Name)
 	})
 }
 

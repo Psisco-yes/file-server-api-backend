@@ -1348,3 +1348,78 @@ func TestUpdateSessionRefreshToken(t *testing.T) {
 	require.Equal(t, newRefreshToken, foundRefreshToken)
 	require.WithinDuration(t, newExpiresAt, foundExpiresAt, time.Second)
 }
+
+func TestFindHighestSharedAncestor(t *testing.T) {
+	owner := createTestUser(t, "user_ancestor_owner")
+	recipient := createTestUser(t, "user_ancestor_recipient")
+
+	root := createTestNode(t, CreateNodeParams{ID: "ancestor_root", OwnerID: owner.ID, Name: "Root", NodeType: "folder"})
+	child := createTestNode(t, CreateNodeParams{ID: "ancestor_child", OwnerID: owner.ID, ParentID: &root.ID, Name: "Child", NodeType: "folder"})
+	grandchild := createTestNode(t, CreateNodeParams{ID: "ancestor_grandchild", OwnerID: owner.ID, ParentID: &child.ID, Name: "Grandchild", NodeType: "file"})
+
+	privateParent := createTestNode(t, CreateNodeParams{ID: "ancestor_private_p", OwnerID: owner.ID, Name: "Private Parent", NodeType: "folder"})
+	sharedChild := createTestNode(t, CreateNodeParams{ID: "ancestor_shared_c", OwnerID: owner.ID, ParentID: &privateParent.ID, Name: "Shared Child", NodeType: "folder"})
+
+	createTestShare(t, ShareNodeParams{NodeID: root.ID, SharerID: owner.ID, RecipientID: recipient.ID, Permissions: "read"})
+	createTestShare(t, ShareNodeParams{NodeID: sharedChild.ID, SharerID: owner.ID, RecipientID: recipient.ID, Permissions: "read"})
+
+	t.Run("finds the highest shared ancestor for a nested node", func(t *testing.T) {
+		ancestor, err := testStore.FindHighestSharedAncestor(context.Background(), grandchild.ID, recipient.ID)
+		require.NoError(t, err)
+		require.NotNil(t, ancestor)
+		require.Equal(t, root.ID, ancestor.ID)
+	})
+
+	t.Run("returns the node itself if it is the highest shared ancestor", func(t *testing.T) {
+		ancestor, err := testStore.FindHighestSharedAncestor(context.Background(), root.ID, recipient.ID)
+		require.NoError(t, err)
+		require.NotNil(t, ancestor)
+		require.Equal(t, root.ID, ancestor.ID)
+	})
+
+	t.Run("returns the node itself if it is shared but has private parents", func(t *testing.T) {
+		ancestor, err := testStore.FindHighestSharedAncestor(context.Background(), sharedChild.ID, recipient.ID)
+		require.NoError(t, err)
+		require.NotNil(t, ancestor, "Should find an ancestor (itself)")
+		require.Equal(t, sharedChild.ID, ancestor.ID, "Should return itself as the share root")
+	})
+
+	t.Run("returns nil if no ancestor is shared", func(t *testing.T) {
+		privateNode := createTestNode(t, CreateNodeParams{ID: "ancestor_private", OwnerID: owner.ID, Name: "Private", NodeType: "file"})
+		ancestor, err := testStore.FindHighestSharedAncestor(context.Background(), privateNode.ID, recipient.ID)
+		require.NoError(t, err)
+		require.Nil(t, ancestor)
+	})
+}
+
+func TestGetRichNodePath(t *testing.T) {
+	owner := createTestUser(t, "user_node_path")
+	root := createTestNode(t, CreateNodeParams{ID: "path_root", OwnerID: owner.ID, Name: "Root", NodeType: "folder"})
+	child := createTestNode(t, CreateNodeParams{ID: "path_child", OwnerID: owner.ID, ParentID: &root.ID, Name: "Child", NodeType: "folder"})
+	grandchild := createTestNode(t, CreateNodeParams{ID: "path_grandchild", OwnerID: owner.ID, ParentID: &child.ID, Name: "Grandchild", NodeType: "file"})
+
+	t.Run("returns correct path for nested node", func(t *testing.T) {
+		path, err := testStore.GetRichNodePath(context.Background(), grandchild.ID, owner.ID)
+		require.NoError(t, err)
+
+		require.Len(t, path, 2)
+		require.Equal(t, "Root", path[0].Name)
+		require.Equal(t, "Child", path[1].Name)
+		require.Equal(t, root.ID, path[0].ID)
+		require.Equal(t, child.ID, path[1].ID)
+	})
+
+	t.Run("returns correct path for child node", func(t *testing.T) {
+		path, err := testStore.GetRichNodePath(context.Background(), child.ID, owner.ID)
+		require.NoError(t, err)
+
+		require.Len(t, path, 1)
+		require.Equal(t, "Root", path[0].Name)
+	})
+
+	t.Run("returns empty path for root node", func(t *testing.T) {
+		path, err := testStore.GetRichNodePath(context.Background(), root.ID, owner.ID)
+		require.NoError(t, err)
+		require.Empty(t, path)
+	})
+}
