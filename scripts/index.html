@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FileServer Manager</title>
+    <style>
+        :root {
+            --bg: #f4f4f9;
+            --text: #333;
+            --card: #fff;
+            --primary: #007acc;
+            --danger: #d32f2f;
+            --warning: #f57c00;
+            --success: #2e7d32;
+            --border: #ddd;
+            --hover: #f0f0f0;
+            --header-bg: #fff;
+            --btn-text: #fff;
+            --input-bg: #fff;
+        }
+        [data-theme="dark"] {
+            --bg: #121212;
+            --text: #e0e0e0;
+            --card: #1e1e1e;
+            --primary: #1e88e5;
+            --danger: #d32f2f;
+            --warning: #f57c00;
+            --success: #388e3c;
+            --border: #333;
+            --hover: #2d2d2d;
+            --header-bg: #1e1e1e;
+            --btn-text: #ffffff;
+            --input-bg: #2d2d2d;
+        }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            transition: background 0.1s, color 0.1s;
+        }
+        .full-width {
+            width: 100%;
+            background: var(--header-bg);
+            border-bottom: 1px solid var(--border);
+            transition: background 0.1s;
+        }
+        .container {
+            max-width: 1100px;
+            min-width: 780px;
+            margin: 0 auto;
+            padding: 0 20px;
+            box-sizing: border-box;
+        }
+        header {
+            padding: 1rem 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        h1 {
+            margin: 0;
+            font-size: 1.2rem;
+        }
+        .tabs {
+            display: flex;
+            gap: 20px;
+        }
+        .tab {
+            padding: 15px 5px;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            opacity: 0.7;
+            color: var(--text);
+            transition: all 0.1s;
+        }
+        .tab:hover {
+            opacity: 1;
+            color: var(--primary);
+        }
+        .tab.active {
+            border-bottom-color: var(--primary);
+            font-weight: bold;
+            opacity: 1;
+        }
+        .content {
+            flex: 1;
+            padding: 30px 0;
+            display: none;
+        }
+        .content.active {
+            display: block;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+        .card {
+            background: var(--card);
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            border: 1px solid var(--border);
+            transition: background 0.1s;
+        }
+        .stat-val {
+            font-size: 2.2rem;
+            font-weight: bold;
+            color: var(--primary);
+        }
+        .stat-label {
+            text-transform: capitalize;
+            margin-top: 5px;
+            opacity: 0.7;
+            font-size: 0.9rem;
+        }
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            background: var(--card);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+            transition: background 0.1s;
+        }
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        th {
+            background: var(--hover);
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+        tr:last-child td {
+            border-bottom: none;
+        }
+        tr:hover {
+            background: var(--hover);
+        }
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            background: var(--primary);
+            color: var(--btn-text);
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: opacity 0.2s, filter 0.2s;
+        }
+        button:hover {
+            filter: brightness(110%);
+        }
+        button.secondary {
+            background: #6c757d;
+        }
+        button.danger {
+            background: var(--danger);
+        }
+        button.warning {
+            background: var(--warning);
+        }
+        button.power {
+            background: var(--danger);
+            font-size: 0.8rem;
+            padding: 5px 10px;
+        }
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+        }
+        .action-btn {
+            padding: 6px 12px;
+            font-size: 1.1rem;
+            border-radius: 6px;
+            color: white;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+        }
+        .btn-pass {
+            background-color: var(--success);
+        }
+        .btn-quota {
+            background-color: var(--primary);
+        }
+        .btn-kill {
+            background-color: var(--warning);
+        }
+        .btn-del {
+            background-color: var(--danger);
+        }
+        .settings-card {
+            background: var(--card);
+            padding: 30px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+        .settings-header {
+            font-size: 1.1rem;
+            font-weight: bold;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 10px;
+        }
+        label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+            font-size: 0.9rem;
+            color: var(--text);
+        }
+        input, select {
+            padding: 10px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--input-bg);
+            color: var(--text);
+            width: 100%;
+            box-sizing: border-box;
+            margin-bottom: 15px;
+            transition: background 0.1s;
+        }
+        input:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+        .status-ok {
+            background: rgba(46, 125, 50, 0.2);
+            color: var(--success);
+        }
+        .status-err {
+            background: rgba(211, 47, 47, 0.2);
+            color: var(--danger);
+        }
+        .modal-overlay {
+            position: fixed;
+            top:0;
+            left:0;
+            width:100%;
+            height:100%;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            backdrop-filter: blur(2px);
+        }
+        .modal {
+            background: var(--card);
+            padding: 30px;
+            border-radius: 12px;
+            width: 420px;
+            max-width: 90%;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.25);
+            border: 1px solid var(--border);
+        }
+        .form-row {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+        .toolbar {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+        }
+        .confirm-msg {
+            margin: 15px 0;
+            white-space: pre-wrap;
+            line-height: 1.5;
+            font-size: 0.95rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="full-width">
+        <div class="container">
+            <header>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <h1>FileServer Admin Panel ⚡</h1>
+                    <div id="status" style="font-size: 0.8rem; opacity: 0.7;">😉 Connected</div>
+                </div>
+                <button class="power" onclick="shutdownServer()">✋ Stop Server</button>
+            </header>
+        </div>
+    </div>
+
+    <div class="full-width">
+        <div class="container">
+            <div class="tabs">
+                <div class="tab active" onclick="switchTab('dashboard')">⚡ Dashboard</div>
+                <div class="tab" onclick="switchTab('users')">✏️ User Management</div>
+                <div class="tab" onclick="switchTab('settings')">⚙️ Settings</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div id="dashboard" class="content active">
+            <div class="toolbar">
+                <button onclick="loadStats()">🔄️ Refresh Statistics</button>
+            </div>
+            <div class="stats-grid" id="stats-container">🤔 Loading stats...</div>
+        </div>
+
+        <div id="users" class="content">
+            <div class="toolbar">
+                <button onclick="loadUsers()">🔄️ Refresh List</button>
+                <button onclick="openModal('modal-add')">🤝 Add New User</button>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:50px">ID</th>
+                        <th>Username</th>
+                        <th>Display Name</th>
+                        <th style="width:100px">Used</th>
+                        <th style="width:100px">Quota</th>
+                        <th style="text-align:center; width: 220px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="user-table"></tbody>
+            </table>
+        </div>
+
+        <div id="settings" class="content">
+            <div class="settings-card">
+                
+                <div class="settings-header">Appearance</div>
+                <label>Theme Preference</label>
+                <select id="cfg-theme" onchange="changeTheme(this.value)">
+                    <option value="light">☀️ Light Mode</option>
+                    <option value="dark">🌙 Dark Mode</option>
+                </select>
+
+                <div class="settings-header" style="margin-top: 10px;">Configuration</div>
+                
+                <label>Path to .env File</label>
+                <input type="text" id="cfg-env-path" placeholder="../.env">
+                
+                <div style="display: flex; gap: 20px;">
+                    <div style="flex: 1">
+                        <label>DB User (From .env)</label>
+                        <input type="text" id="cfg-db-user" disabled>
+                    </div>
+                    <div style="flex: 1">
+                        <label>DB Name (From .env)</label>
+                        <input type="text" id="cfg-db-name" disabled>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 20px;">
+                    <div style="flex: 1">
+                        <label>Database Container</label>
+                        <input type="text" id="cfg-db-container">
+                    </div>
+                    <div style="flex: 1">
+                        <label>App Container</label>
+                        <input type="text" id="cfg-app-container">
+                    </div>
+                </div>
+                
+                <div style="text-align: right; margin-top: 10px;">
+                    <span id="env-status" style="float:left; padding-top:10px;"></span>
+                    <button onclick="saveSettings()">Save Configuration</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-add" class="modal-overlay">
+        <div class="modal">
+            <h3 style="margin-top:0">🤝 Add New User</h3>
+            
+            <label>Username</label>
+            <input type="text" id="add-user" placeholder="e.g. jdoe">
+            
+            <label>Display Name</label>
+            <input type="text" id="add-display" placeholder="e.g. John Doe">
+            
+            <label>Password</label>
+            <input type="password" id="add-pass" placeholder="••••••••">
+            
+            <label>Storage Quota</label>
+            <div style="display: flex; gap: 10px;">
+                <input type="number" id="add-quota-val" placeholder="Value" value="5">
+                <select id="add-quota-unit" style="width: 80px"><option>GB</option><option>MB</option></select>
+            </div>
+            
+            <div class="form-row">
+                <button class="secondary" onclick="closeModal('modal-add')">Cancel</button>
+                <button onclick="addUser()">Create User</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-action" class="modal-overlay">
+        <div class="modal">
+            <h3 id="action-title" style="margin-top:0">Action</h3>
+            <input type="hidden" id="action-username">
+            <input type="hidden" id="action-type">
+            <div id="action-input-container"></div>
+            <div class="form-row">
+                <button class="secondary" onclick="closeModal('modal-action')">Cancel</button>
+                <button onclick="submitAction()">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-confirm" class="modal-overlay">
+        <div class="modal">
+            <h3 id="confirm-title" style="margin-top:0">Title</h3>
+            <p id="confirm-msg" class="confirm-msg">Message</p>
+            <div class="form-row">
+                <button class="secondary" onclick="closeModal('modal-confirm')">Cancel</button>
+                <button id="confirm-btn">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API = '/api';
+
+        function shutdownServer() {
+            openConfirm(
+                "✋ Stop Server",
+                "Are you sure you want to stop the FileServer Manager?\n\nYou will need to restart the script manually to access this panel again.",
+                async () => {
+                        try {
+                            await fetch(API + '/shutdown');
+                        } catch (e) {}
+                        document.body.innerHTML = "<div style='display:flex;height:100vh;justify-content:center;align-items:center;font-family:sans-serif;background:var(--bg);color:var(--text);'><h1>Server Stopped. You can close this tab.</h1></div>";
+                    },
+                    true
+            );
+        }
+
+        function switchTab(id) {
+            document.querySelectorAll('.content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+            event.target.classList.add('active');
+            if (id === 'dashboard') loadStats();
+            if (id === 'users') loadUsers();
+            if (id === 'settings') loadSettings();
+        }
+
+        async function apiCall(endpoint, method = 'GET', body = null) {
+            try {
+                const opts = {
+                    method,
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                };
+                if (body) opts.body = JSON.stringify(body);
+                const res = await fetch(API + endpoint, opts);
+                if (!res.ok) throw await res.text();
+                return await res.json();
+            } catch (e) {
+                console.error(e);
+                return null;
+            }
+        }
+
+        async function loadStats() {
+            const data = await apiCall('/stats');
+            if (!data) return;
+            document.getElementById('stats-container').innerHTML = Object.keys(data).map(k => `
+                        <div class="card">
+                            <div class="stat-val">${data[k]}</div>
+                            <div class="stat-label">${k.replace(/_/g, ' ')}</div>
+                        </div>
+                    `).join('');
+        }
+
+        async function loadUsers() {
+            const users = await apiCall('/users');
+            if (!users) return;
+            const tbody = document.getElementById('user-table');
+            const list = Array.isArray(users) ? users : [users];
+
+            if (list.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 20px;">No users found.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = list.map(u => `
+                        <tr>
+                            <td>${u.id}</td>
+                            <td><strong>${u.username}</strong></td>
+                            <td>${u.display_name}</td>
+                            <td>${u.used_pretty}</td>
+                            <td>${u.quota_pretty}</td>
+                            <td>
+                                <div class="btn-group">
+                                    <button class="action-btn btn-pass" title="Reset Password" onclick="promptAction('pass', '${u.username}')">🔐</button>
+                                    <button class="action-btn btn-quota" title="Set Quota" onclick="promptAction('quota', '${u.username}')">📊</button>
+                                    <button class="action-btn btn-kill" title="Terminate Sessions" onclick="killSessions('${u.username}')">🔫</button>
+                                    <button class="action-btn btn-del" title="Delete User" onclick="deleteUser('${u.username}')">🗑️</button>
+                                </div>
+                            </td>
+                        </tr>
+                    `).join('');
+        }
+
+        async function addUser() {
+            const body = {
+                username: document.getElementById('add-user').value,
+                display_name: document.getElementById('add-display').value,
+                password: document.getElementById('add-pass').value,
+                quota_val: document.getElementById('add-quota-val').value,
+                quota_unit: document.getElementById('add-quota-unit').value
+            };
+            if (!body.username || !body.password) return alert("Username and Password are required");
+
+            const res = await apiCall('/user/add', 'POST', body);
+            if (res && res.success) {
+                closeModal('modal-add');
+                loadUsers();
+                document.getElementById('add-user').value = '';
+                document.getElementById('add-pass').value = '';
+                showSuccess("✅ User Created", `User '${body.username}' has been successfully added.`);
+            }
+        }
+
+        function openConfirm(title, msg, actionFn, isDanger) {
+            document.getElementById('confirm-title').innerText = title;
+            document.getElementById('confirm-msg').innerText = msg;
+
+            const btn = document.getElementById('confirm-btn');
+            const cancelBtn = document.querySelector('#modal-confirm .secondary');
+            cancelBtn.style.display = 'inline-block';
+
+            const newBtn = btn.cloneNode(true);
+            btn.parentNode.replaceChild(newBtn, btn);
+
+            newBtn.innerText = "Confirm";
+            newBtn.className = isDanger ? "danger" : "warning";
+
+            newBtn.onclick = async () => {
+                closeModal('modal-confirm');
+                await actionFn();
+            };
+
+            openModal('modal-confirm');
+        }
+
+        function showSuccess(title, msg) {
+            document.getElementById('confirm-title').innerText = title;
+            document.getElementById('confirm-msg').innerText = msg;
+
+            const btn = document.getElementById('confirm-btn');
+            const cancelBtn = document.querySelector('#modal-confirm .secondary');
+
+            cancelBtn.style.display = 'none';
+
+            const newBtn = btn.cloneNode(true);
+            btn.parentNode.replaceChild(newBtn, btn);
+
+            newBtn.innerText = "OK";
+            newBtn.className = "";
+            newBtn.onclick = () => closeModal('modal-confirm');
+
+            openModal('modal-confirm');
+        }
+
+        function deleteUser(username) {
+            openConfirm(
+                `🗑️ Delete User: ${username}`,
+                `Are you sure you want to delete user '${username}' and their files?\nThis action cannot be undone.`,
+                async () => {
+                        const res = await apiCall('/user/delete', 'POST', {
+                            username
+                        });
+                        if (res && res.success) {
+                            loadUsers();
+                            showSuccess("✅ User Deleted", `User '${username}' and all associated files have been permanently deleted.`);
+                        }
+                    },
+                    true
+            );
+        }
+
+        function killSessions(username) {
+            openConfirm(
+                `🔫 Terminate Sessions: ${username}`,
+                `Are you sure you want to log out '${username}' from all active devices?`,
+                async () => {
+                        const res = await apiCall('/user/kill', 'POST', {
+                            username
+                        });
+                        if (res && res.success) {
+                            showSuccess("✅ Sessions Terminated", `All active sessions for user '${username}' have been successfully terminated.`);
+                        }
+                    },
+                    false
+            );
+        }
+
+        function promptAction(type, username) {
+            document.getElementById('action-username').value = username;
+            document.getElementById('action-type').value = type;
+            const container = document.getElementById('action-input-container');
+            const titleEl = document.getElementById('action-title');
+
+            if (type === 'pass') {
+                titleEl.innerText = "🔐 Reset Password: " + username;
+                container.innerHTML = '<label>New Password</label><input type="password" id="act-input" placeholder="Enter new password">';
+            } else {
+                titleEl.innerText = "📊 Set Quota: " + username;
+                container.innerHTML = `
+                            <label>Storage Limit</label>
+                            <div style="display: flex; gap: 10px;">
+                                <input type="number" id="act-input" placeholder="Value">
+                                <select id="act-unit"><option>GB</option><option>MB</option></select>
+                            </div>`;
+            }
+            openModal('modal-action');
+        }
+
+        async function submitAction() {
+            const type = document.getElementById('action-type').value;
+            const username = document.getElementById('action-username').value;
+            const val = document.getElementById('act-input').value;
+
+            if (!val) return;
+
+            let successTitle = "";
+            let successMsg = "";
+
+            if (type === 'pass') {
+                await apiCall('/user/reset-pass', 'POST', {
+                    username,
+                    new_password: val
+                });
+                successTitle = "✅ Password Changed";
+                successMsg = `The password for user '${username}' has been successfully updated.`;
+            } else {
+                const unit = document.getElementById('act-unit').value;
+                await apiCall('/user/quota', 'POST', {
+                    username,
+                    quota_val: val,
+                    quota_unit: unit
+                });
+                successTitle = "✅ Quota Updated";
+                successMsg = `Storage quota for user '${username}' has been set to ${val} ${unit}.`;
+            }
+
+            closeModal('modal-action');
+            loadUsers();
+            showSuccess(successTitle, successMsg);
+        }
+
+        async function loadSettings() {
+            const cfg = await apiCall('/settings');
+            if (cfg) {
+                document.getElementById('cfg-db-container').value = cfg.DB_Container;
+                document.getElementById('cfg-app-container').value = cfg.App_Container;
+                document.getElementById('cfg-env-path').value = cfg.EnvPath;
+                document.getElementById('cfg-theme').value = cfg.Theme;
+                document.getElementById('cfg-db-user').value = cfg.DB_User;
+                document.getElementById('cfg-db-name').value = cfg.DB_Name;
+
+                const statusEl = document.getElementById('env-status');
+                if (cfg.EnvFound) {
+                    statusEl.innerHTML = '<span class="status-badge status-ok">✅ .env Loaded</span>';
+                } else {
+                    statusEl.innerHTML = '<span class="status-badge status-err">⚠️ .env Not Found</span>';
+                }
+                applyTheme(cfg.Theme);
+            }
+        }
+
+        async function changeTheme(newTheme) {
+            applyTheme(newTheme);
+            await saveSettings();
+        }
+
+        async function saveSettings() {
+            const body = {
+                DB_Container: document.getElementById('cfg-db-container').value,
+                App_Container: document.getElementById('cfg-app-container').value,
+                EnvPath: document.getElementById('cfg-env-path').value,
+                Theme: document.getElementById('cfg-theme').value
+            };
+            await apiCall('/settings', 'POST', body);
+            loadSettings();
+        }
+
+        function applyTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+        }
+
+        function openModal(id) {
+            document.getElementById(id).style.display = 'flex';
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).style.display = 'none';
+        }
+
+        loadSettings();
+        loadStats();
+    </script>
+</body>
+</html>

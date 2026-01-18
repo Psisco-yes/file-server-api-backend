@@ -127,65 +127,46 @@ Dla małych plików (np. < 100MB), nadal można używać prostszego endpointu `P
 
 ---
 
-## Zarządzanie Administracyjne (Skrypty PowerShell)
+## Zarządzanie Administracyjne (Panel GUI)
 
-Zarządzanie użytkownikami i systemem odbywa się za pomocą gotowych skryptów PowerShell (`*.ps1`), które znajdują się w folderze `/scripts`.
+Zarządzanie użytkownikami i systemem odbywa się teraz za pomocą scentralizowanego narzędzia z graficznym interfejsem webowym (Web GUI), uruchamianego przez PowerShell. Narzędzie to zastępuje zestaw pojedynczych skryptów CLI.
 
 ### Wymagania
 
 *   Uruchomione kontenery (`docker-compose up`).
-*   Terminal PowerShell.
-*   Zmienne środowiskowe w pliku `.env` muszą być poprawnie ustawione.
+*   System z obsługą PowerShell (Windows, Linux, macOS).
+*   Przeglądarka internetowa.
 
-### 1. Dodawanie Nowego Użytkownika
+### Uruchomienie Panelu
 
-```powershell
-.\add-user.ps1 -Username "nowyuser" -Password "SuperT@jneHaslo1" -DisplayName "Nowy Użytkownik"
-```
-
-### 2. Trwałe Usuwanie Użytkownika
-
-**UWAGA: Ta operacja jest nieodwracalna!** Usuwa użytkownika, wszystkie jego pliki, udostępnienia i sesje.
+Uruchom skrypt w terminalu PowerShell:
 
 ```powershell
-.\delete-user.ps1 -Username "nowyuser"
+.\Manage-FileServer.ps1
 ```
 
-### 3. Zmiana Limitu Miejsca
+Skrypt uruchomi lokalny serwer HTTP (domyślnie na porcie `8085`) i automatycznie otworzy panel w Twojej domyślnej przeglądarce.
 
-Ustawia limit miejsca dla użytkownika w Gigabajtach (GB).
+### Funkcjonalności Panelu
 
-```powershell
-.\change-quota.ps1 -Username "nowyuser" -QuotaGB 25
-```
+Panel podzielony jest na trzy główne zakładki:
 
-### 4. Resetowanie Hasła Użytkownika
+1.  **⚡ Dashboard (Pulpit):**
+    *   Wyświetla statystyki systemu na żywo: liczbę użytkowników, aktywnych plików/folderów, łączne zużycie dysku oraz liczbę aktywnych sesji.
 
-```powershell
-.\reset-password.ps1 -Username "nowyuser" -NewPassword "NoweLepszeHaslo_456"
-```
+2.  **✏️ User Management (Użytkownicy):**
+    *   Wyświetla listę użytkowników wraz z ich aktualnym zużyciem miejsca (Used / Quota).
+    *   **Dodawanie użytkownika (🤝):** Prosty formularz do tworzenia nowych kont.
+    *   **Akcje na użytkownikach:**
+        *   🔐 **Reset Hasła:** Bezpieczna zmiana hasła.
+        *   📊 **Quota:** Zmiana limitu miejsca (obsługa jednostek MB i GB).
+        *   🔫 **Terminate Sessions:** Natychmiastowe wylogowanie użytkownika ze wszystkich urządzeń.
+        *   🗑️ **Delete User:** Trwałe usuwanie użytkownika wraz ze wszystkimi jego fizycznymi plikami.
 
-### 5. Listowanie Wszystkich Użytkowników
-
-```powershell
-.\list-users.ps1
-```
-
-### 6. Wymuszone Wylogowanie Użytkownika
-
-Natychmiast kończy wszystkie aktywne sesje dla danego użytkownika.
-
-```powershell
-.\terminate-sessions.ps1 -Username "nowyuser"
-```
-
-### 7. Statystyki Systemu
-
-Wyświetla ogólne statystyki serwera.
-
-```powershell
-.\system-stats.ps1
-```
+3.  **⚙️ Settings (Ustawienia):**
+    *   **Motyw:** Przełączanie między trybem jasnym i ciemnym.
+    *   **Konfiguracja:** Możliwość zmiany nazw kontenerów Docker oraz ścieżki do pliku `.env`.
+    *   **Integracja z .env:** Panel automatycznie odczytuje poświadczenia do bazy danych (`POSTGRES_USER`, `POSTGRES_DB`, `POSTGRES_PASSWORD`) z pliku `.env`, co eliminuje konieczność ręcznego logowania.
 
 ---
 
@@ -300,4 +281,3 @@ Komunikaty są wysyłane w formacie JSON i mają następującą strukturę:
 -   **Wysokie zużycie RAM przy archiwizacji:** Mechanizm tworzenia archiwum ZIP może być nieefektywny przy bardzo dużych strukturach folderów i mógłby zostać zoptymalizowany (streaming).
 -   **Natychmiastowe unieważnianie tokenów (Blacklisting):** Obecnie `access token` jest ważny do momentu naturalnego wygaśnięcia. W przyszłości można zaimplementować mechanizm "czarnej listy" (np. w Redis) do natychmiastowego unieważniania tokenów po wylogowaniu.
 -   **Dziennik Audytowy (Audit Log):** Stworzenie oddzielnego, niezmiennego dziennika zdarzeń krytycznych dla bezpieczeństwa i administracji.
-```
