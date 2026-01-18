@@ -291,7 +291,6 @@
     </style>
 </head>
 <body>
-
     <div class="full-width">
         <div class="container">
             <header>
@@ -303,7 +302,6 @@
             </header>
         </div>
     </div>
-
     <div class="full-width">
         <div class="container">
             <div class="tabs">
@@ -313,7 +311,6 @@
             </div>
         </div>
     </div>
-
     <div class="container">
         <div id="dashboard" class="content active">
             <div class="toolbar">
@@ -321,7 +318,6 @@
             </div>
             <div class="stats-grid" id="stats-container">🤔 Loading stats...</div>
         </div>
-
         <div id="users" class="content">
             <div class="toolbar">
                 <button onclick="loadUsers()">🔄️ Refresh List</button>
@@ -341,22 +337,17 @@
                 <tbody id="user-table"></tbody>
             </table>
         </div>
-
         <div id="settings" class="content">
             <div class="settings-card">
-                
                 <div class="settings-header">Appearance</div>
                 <label>Theme Preference</label>
                 <select id="cfg-theme" onchange="changeTheme(this.value)">
                     <option value="light">☀️ Light Mode</option>
                     <option value="dark">🌙 Dark Mode</option>
                 </select>
-
                 <div class="settings-header" style="margin-top: 10px;">Configuration</div>
-                
                 <label>Path to .env File</label>
                 <input type="text" id="cfg-env-path" placeholder="../.env">
-                
                 <div style="display: flex; gap: 20px;">
                     <div style="flex: 1">
                         <label>DB User (From .env)</label>
@@ -367,7 +358,6 @@
                         <input type="text" id="cfg-db-name" disabled>
                     </div>
                 </div>
-
                 <div style="display: flex; gap: 20px;">
                     <div style="flex: 1">
                         <label>Database Container</label>
@@ -378,7 +368,6 @@
                         <input type="text" id="cfg-app-container">
                     </div>
                 </div>
-                
                 <div style="text-align: right; margin-top: 10px;">
                     <span id="env-status" style="float:left; padding-top:10px;"></span>
                     <button onclick="saveSettings()">Save Configuration</button>
@@ -386,33 +375,26 @@
             </div>
         </div>
     </div>
-
     <div id="modal-add" class="modal-overlay">
         <div class="modal">
             <h3 style="margin-top:0">🤝 Add New User</h3>
-            
             <label>Username</label>
             <input type="text" id="add-user" placeholder="e.g. jdoe">
-            
             <label>Display Name</label>
             <input type="text" id="add-display" placeholder="e.g. John Doe">
-            
             <label>Password</label>
             <input type="password" id="add-pass" placeholder="••••••••">
-            
             <label>Storage Quota</label>
             <div style="display: flex; gap: 10px;">
                 <input type="number" id="add-quota-val" placeholder="Value" value="5">
                 <select id="add-quota-unit" style="width: 80px"><option>GB</option><option>MB</option></select>
             </div>
-            
             <div class="form-row">
                 <button class="secondary" onclick="closeModal('modal-add')">Cancel</button>
                 <button onclick="addUser()">Create User</button>
             </div>
         </div>
     </div>
-
     <div id="modal-action" class="modal-overlay">
         <div class="modal">
             <h3 id="action-title" style="margin-top:0">Action</h3>
@@ -425,7 +407,6 @@
             </div>
         </div>
     </div>
-
     <div id="modal-confirm" class="modal-overlay">
         <div class="modal">
             <h3 id="confirm-title" style="margin-top:0">Title</h3>
@@ -436,10 +417,9 @@
             </div>
         </div>
     </div>
-
     <script>
         const API = '/api';
-
+        
         function shutdownServer() {
             openConfirm(
                 "✋ Stop Server",
@@ -553,15 +533,12 @@
 
             const newBtn = btn.cloneNode(true);
             btn.parentNode.replaceChild(newBtn, btn);
-
             newBtn.innerText = "Confirm";
             newBtn.className = isDanger ? "danger" : "warning";
-
             newBtn.onclick = async () => {
                 closeModal('modal-confirm');
                 await actionFn();
             };
-
             openModal('modal-confirm');
         }
 
@@ -571,16 +548,13 @@
 
             const btn = document.getElementById('confirm-btn');
             const cancelBtn = document.querySelector('#modal-confirm .secondary');
-
             cancelBtn.style.display = 'none';
 
             const newBtn = btn.cloneNode(true);
             btn.parentNode.replaceChild(newBtn, btn);
-
             newBtn.innerText = "OK";
             newBtn.className = "";
             newBtn.onclick = () => closeModal('modal-confirm');
-
             openModal('modal-confirm');
         }
 
